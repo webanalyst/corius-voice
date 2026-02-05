@@ -1,15 +1,6 @@
-# Dependencies
-node_modules/
-
 # Build output
-out/
-dist/
-release/
-
-# Environment variables
-.env
-.env.local
-.env.*.local
+build/
+DerivedData/
 
 # IDE
 .vscode/
@@ -24,25 +15,11 @@ Thumbs.db
 
 # Logs
 *.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# Testing
-coverage/
-
-# Electron
-*.asar
-
-# TypeScript
-*.tsbuildinfo
 
 # Swift/Xcode
 xcuserdata/
 *.xcscmblueprint
 *.xccheckout
-DerivedData/
-build/
 *.moved-aside
 *.pbxuser
 !default.pbxuser
@@ -56,8 +33,6 @@ build/
 *.ipa
 *.dSYM.zip
 *.dSYM
-*.xcworkspace
-!default.xcworkspace
 *.app
 
 # Swift Package Manager
@@ -65,5 +40,3 @@ build/
 Packages/
 Package.resolved
 
-# Electron backup
-electron-backup/

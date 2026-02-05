@@ -2,176 +2,172 @@ import Foundation
 import AppKit
 import CoreGraphics
 import Carbon
-import IOKit.hid
 
 class HotkeyService {
     static let shared = HotkeyService()
 
-    private var eventTap: CFMachPort?
-    private var runLoopSource: CFRunLoopSource?
-    private var hidManager: IOHIDManager?
-    
+    private var globalMonitor: Any?
+    private var localMonitor: Any?
+    private var flagsMonitor: Any?
+
     private var isFnKeyPressed = false
     private var fnKeyCheckTimer: Timer?
+
+    // Track state to avoid duplicates
+    private var lastFnState = false
+    private var fnPressTime: Date?
+
+    // Debouncing
+    private var debounceTimer: Timer?
+    private let debounceInterval: TimeInterval = 0.15 // 150ms debounce
 
     private init() {}
 
     var isRunning: Bool {
-        return eventTap != nil || hidManager != nil
+        return globalMonitor != nil || localMonitor != nil || fnKeyCheckTimer != nil
     }
 
     func start() {
-        print("[HotkeyService] 🚀 Starting Fn key detection...")
-        
+        print("[HotkeyService] 🚀 Starting Globe/Fn key detection...")
+
         // Check accessibility permissions
-        if !checkAccessibilityPermissions() {
-            print("[HotkeyService] ⚠️ Accessibility permissions not granted")
-            requestAccessibilityPermissions()
-            
-            // Show alert to user
-            DispatchQueue.main.async {
-                let alert = NSAlert()
-                alert.messageText = "Accessibility Permission Required"
-                alert.informativeText = "Corius Voice needs accessibility permissions to detect the Fn key. Please grant permission in System Settings > Privacy & Security > Accessibility."
-                alert.alertStyle = .warning
-                alert.addButton(withTitle: "Open System Settings")
-                alert.addButton(withTitle: "Cancel")
-                
-                if alert.runModal() == .alertFirstButtonReturn {
-                    if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
-                        NSWorkspace.shared.open(url)
-                    }
-                }
-            }
+        let hasPermissions = AXIsProcessTrusted()
+
+        if hasPermissions {
+            print("[HotkeyService] ✅ Accessibility permissions granted")
+            setupNSEventMonitors()
+        } else {
+            print("[HotkeyService] ℹ️ No accessibility permissions - using polling")
+            // Only use polling if no accessibility permissions
+            startFnKeyPolling()
         }
-        
-        // Method 1: CGEvent tap for modifier flags
-        setupEventTap()
-        
-        // Method 2: IOKit HID for direct keyboard access
-        setupHIDManager()
-        
-        // Method 3: Polling as last resort
-        startFnKeyPolling()
-        
+
         print("[HotkeyService] ✅ Started successfully")
-        print("[HotkeyService] 📝 Press and hold Fn key to record")
+        print("[HotkeyService] 📝 Press and hold Globe/Fn key to record")
     }
 
     func stop() {
-        if let eventTap = eventTap {
-            CGEvent.tapEnable(tap: eventTap, enable: false)
+        if let monitor = globalMonitor {
+            NSEvent.removeMonitor(monitor)
+            globalMonitor = nil
+        }
+        if let monitor = localMonitor {
+            NSEvent.removeMonitor(monitor)
+            localMonitor = nil
+        }
+        if let monitor = flagsMonitor {
+            NSEvent.removeMonitor(monitor)
+            flagsMonitor = nil
         }
 
-        if let runLoopSource = runLoopSource {
-            CFRunLoopRemoveSource(CFRunLoopGetCurrent(), runLoopSource, .commonModes)
-        }
-        
-        if let hidManager = hidManager {
-            IOHIDManagerClose(hidManager, IOOptionBits(kIOHIDOptionsTypeNone))
-        }
-        
         fnKeyCheckTimer?.invalidate()
         fnKeyCheckTimer = nil
 
-        eventTap = nil
-        runLoopSource = nil
-        hidManager = nil
+        debounceTimer?.invalidate()
+        debounceTimer = nil
 
         print("[HotkeyService] Stopped")
     }
 
-    private func checkAccessibilityPermissions() -> Bool {
-        return AXIsProcessTrusted()
+    // MARK: - NSEvent Monitors (Better for Globe key)
+
+    private func setupNSEventMonitors() {
+        // Monitor for flagsChanged events globally
+        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
+            self?.handleFlagsChanged(event)
+        }
+
+        // Also monitor locally when app is active
+        localMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
+            self?.handleFlagsChanged(event)
+            return event
+        }
+
+        print("[HotkeyService] ✅ NSEvent monitors created")
     }
 
-    private func requestAccessibilityPermissions() {
-        let options: NSDictionary = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
-        AXIsProcessTrustedWithOptions(options)
+    private func handleFlagsChanged(_ event: NSEvent) {
+        let flags = event.modifierFlags
+
+        // Check for Globe/Fn key - it's the .function flag
+        let fnPressed = flags.contains(.function)
+
+        // Check if ANY other modifier is pressed - if so, ignore
+        let hasCommand = flags.contains(.command)
+        let hasOption = flags.contains(.option)
+        let hasControl = flags.contains(.control)
+        let hasShift = flags.contains(.shift)
+        let hasOtherModifier = hasCommand || hasOption || hasControl || hasShift
+
+        // Check if arrow keys or other keys are pressed
+        let keyCode = event.keyCode
+        let isArrowOrNavKey = isProblematicKeyCode(keyCode)
+
+        // Also check if any arrow key is currently held down
+        let arrowHeld = isAnyArrowKeyPressed()
+
+        // Debug logging - ALWAYS log when fn flag is set
+        if fnPressed {
+            print("[HotkeyService] 🔑 Flags: fn=\(fnPressed), keyCode=\(keyCode), otherMod=\(hasOtherModifier), isArrowCode=\(isArrowOrNavKey), arrowHeld=\(arrowHeld)")
+        }
+
+        // Only trigger if:
+        // 1. Fn flag changed state
+        // 2. No other modifiers are pressed
+        // 3. Not caused by arrow/nav keys (either keyCode or held state)
+
+        let shouldIgnore = hasOtherModifier || isArrowOrNavKey || arrowHeld
+
+        if fnPressed && !isFnKeyPressed && !shouldIgnore {
+            // Fn pressed - use debounce to avoid false positives
+            debounceTimer?.invalidate()
+            debounceTimer = Timer.scheduledTimer(withTimeInterval: debounceInterval, repeats: false) { [weak self] _ in
+                self?.confirmFnPress()
+            }
+            fnPressTime = Date()
+        } else if !fnPressed && isFnKeyPressed {
+            // Fn released - immediate response
+            debounceTimer?.invalidate()
+            debounceTimer = nil
+            setFnState(false)
+        } else if shouldIgnore {
+            // Another key is involved - cancel any pending press
+            debounceTimer?.invalidate()
+            debounceTimer = nil
+            if isFnKeyPressed {
+                print("[HotkeyService] ⚠️ Cancelling due to other key")
+                setFnState(false)
+            }
+        }
+
+        lastFnState = fnPressed
     }
 
-    private func setupEventTap() {
-        // Listen for flags changed and all key events
-        let eventMask: CGEventMask = (1 << CGEventType.flagsChanged.rawValue) |
-                                     (1 << CGEventType.keyDown.rawValue) |
-                                     (1 << CGEventType.keyUp.rawValue)
+    private func confirmFnPress() {
+        // Double-check that Fn is still pressed and nothing else
+        guard let event = CGEvent(source: nil) else { return }
+        let flags = event.flags
 
-        let callback: CGEventTapCallBack = { proxy, type, event, refcon in
-            guard let refcon = refcon else {
-                return Unmanaged.passRetained(event)
-            }
+        let fnStillPressed = flags.contains(.maskSecondaryFn)
+        let hasCommand = flags.contains(.maskCommand)
+        let hasOption = flags.contains(.maskAlternate)
+        let hasControl = flags.contains(.maskControl)
+        let hasShift = flags.contains(.maskShift)
+        let hasOtherModifier = hasCommand || hasOption || hasControl || hasShift
 
-            let service = Unmanaged<HotkeyService>.fromOpaque(refcon).takeUnretainedValue()
-            return service.handleEvent(proxy: proxy, type: type, event: event)
+        let arrowPressed = isAnyArrowKeyPressed()
+
+        if fnStillPressed && !hasOtherModifier && !arrowPressed && !isFnKeyPressed {
+            setFnState(true)
         }
-
-        let refcon = Unmanaged.passUnretained(self).toOpaque()
-
-        guard let tap = CGEvent.tapCreate(
-            tap: .cgSessionEventTap,
-            place: .headInsertEventTap,
-            options: .defaultTap,
-            eventsOfInterest: eventMask,
-            callback: callback,
-            userInfo: refcon
-        ) else {
-            print("[HotkeyService] ❌ Failed to create event tap")
-            return
-        }
-
-        eventTap = tap
-
-        runLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
-        CFRunLoopAddSource(CFRunLoopGetCurrent(), runLoopSource, .commonModes)
-        CGEvent.tapEnable(tap: tap, enable: true)
-
-        print("[HotkeyService] ✅ CGEvent tap created")
     }
 
-    private func handleEvent(proxy: CGEventTapProxy, type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
-        // Re-enable tap if it gets disabled
-        if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-            print("[HotkeyService] ⚠️ Event tap disabled, re-enabling...")
-            if let tap = eventTap {
-                CGEvent.tapEnable(tap: tap, enable: true)
-            }
-            return Unmanaged.passRetained(event)
-        }
+    private func setFnState(_ pressed: Bool) {
+        guard pressed != isFnKeyPressed else { return }
 
-        // Handle flags changed (modifier keys)
-        if type == .flagsChanged {
-            let flags = event.flags
-            let fnPressed = flags.contains(.maskSecondaryFn)
-            
-            // Log all flag changes for debugging
-            if fnPressed != isFnKeyPressed {
-                print("[HotkeyService] 🔑 Flags: \(flags.rawValue)")
-                print("[HotkeyService] 🔑 SecondaryFn flag: \(fnPressed)")
-            }
+        isFnKeyPressed = pressed
+        print("[HotkeyService] 🎤 Globe/Fn key \(pressed ? "PRESSED ✅" : "RELEASED ⭕️")")
 
-            if fnPressed != isFnKeyPressed {
-                isFnKeyPressed = fnPressed
-                print("[HotkeyService] 🎤 Fn key \(fnPressed ? "PRESSED ✅" : "RELEASED ⭕️")")
-                notifyKeyStateChange(pressed: fnPressed)
-            }
-        }
-        
-        // Also check keyDown/keyUp events for Fn key combinations
-        if type == .keyDown || type == .keyUp {
-            let flags = event.flags
-            let fnPressed = flags.contains(.maskSecondaryFn)
-            
-            if fnPressed != isFnKeyPressed {
-                isFnKeyPressed = fnPressed
-                print("[HotkeyService] 🎤 Fn key detected via keyEvent: \(fnPressed ? "PRESSED ✅" : "RELEASED ⭕️")")
-                notifyKeyStateChange(pressed: fnPressed)
-            }
-        }
-
-        return Unmanaged.passRetained(event)
-    }
-    
-    private func notifyKeyStateChange(pressed: Bool) {
         DispatchQueue.main.async {
             NotificationCenter.default.post(
                 name: .fnKeyStateChanged,
@@ -180,90 +176,131 @@ class HotkeyService {
             )
         }
     }
-    
-    // MARK: - IOKit HID Manager (Direct keyboard access)
-    
-    private func setupHIDManager() {
-        hidManager = IOHIDManagerCreate(kCFAllocatorDefault, IOOptionBits(kIOHIDOptionsTypeNone))
-        
-        guard let manager = hidManager else {
-            print("[HotkeyService] ❌ Failed to create HID manager")
-            return
+
+    private func isProblematicKeyCode(_ keyCode: UInt16) -> Bool {
+        // For flagsChanged events:
+        // - keyCode 63 is the Fn/Globe key itself
+        // - keyCode 0 might mean just modifier change (no specific key)
+        // - Any other keyCode means another key was pressed WITH the modifier
+
+        // These are the ONLY acceptable keyCodes for Globe key alone
+        let acceptableCodes: Set<UInt16> = [0, 63]
+
+        // If keyCode is acceptable, it's NOT problematic
+        if acceptableCodes.contains(keyCode) {
+            return false
         }
-        
-        // Match keyboard devices
-        let deviceMatch: [String: Any] = [
-            kIOHIDDeviceUsagePageKey as String: kHIDPage_GenericDesktop,
-            kIOHIDDeviceUsageKey as String: kHIDUsage_GD_Keyboard
-        ]
-        
-        IOHIDManagerSetDeviceMatching(manager, deviceMatch as CFDictionary)
-        
-        // Register callbacks
-        let context = Unmanaged.passUnretained(self).toOpaque()
-        
-        IOHIDManagerRegisterInputValueCallback(manager, { context, result, sender, value in
-            guard let context = context else { return }
-            let service = Unmanaged<HotkeyService>.fromOpaque(context).takeUnretainedValue()
-            service.handleHIDInput(value: value)
-        }, context)
-        
-        IOHIDManagerScheduleWithRunLoop(manager, CFRunLoopGetCurrent(), CFRunLoopMode.defaultMode.rawValue)
-        
-        let openResult = IOHIDManagerOpen(manager, IOOptionBits(kIOHIDOptionsTypeNone))
-        if openResult == kIOReturnSuccess {
-            print("[HotkeyService] ✅ HID manager opened successfully")
-        } else {
-            print("[HotkeyService] ⚠️ Failed to open HID manager: \(openResult)")
-        }
+
+        // Any other keyCode is problematic (arrow, F-key, letter, etc.)
+        return true
     }
-    
-    private func handleHIDInput(value: IOHIDValue) {
-        let element = IOHIDValueGetElement(value)
-        let usagePage = IOHIDElementGetUsagePage(element)
-        let usage = IOHIDElementGetUsage(element)
-        let intValue = IOHIDValueGetIntegerValue(value)
-        
-        // Fn key is typically on usage page 0xFF (vendor defined) or 0x07 (keyboard)
-        // Usage varies by keyboard manufacturer
-        
-        // Log all keyboard events for debugging
-        if usagePage == 0x07 || usagePage == 0xFF {
-            print("[HotkeyService] 🎹 HID: page=\(usagePage), usage=\(usage), value=\(intValue)")
-            
-            // Common Fn key codes: 0x63 (99), 0xFF, varies by manufacturer
-            if usage == 0x63 || usage == 0xFF {
-                let pressed = intValue != 0
-                if pressed != isFnKeyPressed {
-                    isFnKeyPressed = pressed
-                    print("[HotkeyService] 🎤 Fn key detected via HID: \(pressed ? "PRESSED ✅" : "RELEASED ⭕️")")
-                    notifyKeyStateChange(pressed: pressed)
-                }
+
+    private func isAnyArrowKeyPressed() -> Bool {
+        let keysToCheck: [CGKeyCode] = [123, 124, 125, 126, 115, 116, 117, 119, 121]
+        for keyCode in keysToCheck {
+            if CGEventSource.keyState(.combinedSessionState, key: keyCode) {
+                return true
             }
         }
+        return false
     }
-    
-    // MARK: - Polling Method (Last resort)
-    
+
+    private func isGlobeKeyPhysicallyPressed() -> Bool {
+        // KeyCode 63 is the Fn/Globe key on most keyboards
+        // KeyCode 179 is Globe key on some newer MacBooks
+        return CGEventSource.keyState(.combinedSessionState, key: 63) ||
+               CGEventSource.keyState(.combinedSessionState, key: 179)
+    }
+
+    private func isAnyNonModifierKeyPressed() -> Bool {
+        // Check common keys that might trigger the Fn flag
+        // Arrow keys
+        for keyCode: CGKeyCode in [123, 124, 125, 126] {
+            if CGEventSource.keyState(.combinedSessionState, key: keyCode) {
+                return true
+            }
+        }
+        // Navigation keys
+        for keyCode: CGKeyCode in [115, 116, 117, 119, 121] {
+            if CGEventSource.keyState(.combinedSessionState, key: keyCode) {
+                return true
+            }
+        }
+        // F-keys
+        for keyCode: CGKeyCode in [122, 120, 99, 118, 96, 97, 98, 100, 101, 109, 103, 111] {
+            if CGEventSource.keyState(.combinedSessionState, key: keyCode) {
+                return true
+            }
+        }
+        return false
+    }
+
+    // MARK: - Polling Method (Backup)
+
+    private var pollDebounceCount = 0
+    private var lastPollState = false
+
     private func startFnKeyPolling() {
-        // Poll every 50ms to check Fn key state
         fnKeyCheckTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
             self?.checkFnKeyState()
         }
-        print("[HotkeyService] ✅ Started Fn key polling")
+        print("[HotkeyService] ✅ Started polling (backup)")
     }
-    
+
     private func checkFnKeyState() {
-        // Create a temporary event to check current modifier flags
         guard let event = CGEvent(source: nil) else { return }
-        
+
         let flags = event.flags
-        let fnPressed = flags.contains(.maskSecondaryFn)
-        
-        if fnPressed != isFnKeyPressed {
-            isFnKeyPressed = fnPressed
-            print("[HotkeyService] 🎤 Fn key detected via polling: \(fnPressed ? "PRESSED ✅" : "RELEASED ⭕️")")
-            notifyKeyStateChange(pressed: fnPressed)
+        let fnFlagSet = flags.contains(.maskSecondaryFn)
+
+        // Check for other modifiers
+        let hasCommand = flags.contains(.maskCommand)
+        let hasOption = flags.contains(.maskAlternate)
+        let hasControl = flags.contains(.maskControl)
+        let hasShift = flags.contains(.maskShift)
+        let hasOtherModifier = hasCommand || hasOption || hasControl || hasShift
+
+        // Check if any non-modifier key is pressed (arrows, F-keys, etc.)
+        let anyKeyPressed = isAnyNonModifierKeyPressed()
+
+        // Check if Globe key (keyCode 63 or 179) is physically pressed
+        let globeKeyPressed = isGlobeKeyPhysicallyPressed()
+
+        // Release is always immediate - Globe key must be physically released
+        if !globeKeyPressed && isFnKeyPressed {
+            pollDebounceCount = 0
+            setFnState(false)
+            return
+        }
+
+        // Cancel if we're recording and another key is pressed
+        if isFnKeyPressed && anyKeyPressed {
+            print("[HotkeyService] ⚠️ Other key pressed while recording, stopping")
+            pollDebounceCount = 0
+            setFnState(false)
+            return
+        }
+
+        // Use Globe key physical state - NOT the fn flag (which arrow keys also set)
+        let shouldBePressed = globeKeyPressed && !hasOtherModifier && !anyKeyPressed
+
+        // Debug logging
+        if fnFlagSet || globeKeyPressed {
+            if pollDebounceCount == 0 {
+                print("[HotkeyService] 📊 Poll: fnFlag=\(fnFlagSet), globeKey=\(globeKeyPressed), anyKey=\(anyKeyPressed), should=\(shouldBePressed)")
+            }
+        }
+
+        if shouldBePressed == lastPollState {
+            pollDebounceCount += 1
+        } else {
+            pollDebounceCount = 0
+            lastPollState = shouldBePressed
+        }
+
+        // Require 4 consistent polls (200ms) for press
+        if pollDebounceCount >= 4 && shouldBePressed && !isFnKeyPressed {
+            setFnState(true)
         }
     }
 }

@@ -1,0 +1,16 @@
+disabled_rules:
+  - trailing_whitespace
+  - line_length
+  - identifier_name
+opt_in_rules:
+  - empty_count
+  - implicit_return
+  - multiline_parameters
+  - unused_import
+  - vertical_parameter_alignment
+included:
+  - CoriusVoice
+excluded:
+  - CoriusVoice/Resources
+  - CoriusVoice/Assets.xcassets
+reporter: "xcode"

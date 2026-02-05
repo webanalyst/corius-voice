@@ -7,7 +7,29 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		02F0C57C7EE5616AAB2D13DA /* WebMDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 043407DB84D708241930F361 /* WebMDecoder.swift */; };
+		A20000000000000000000002 /* WorkspaceStorageServiceOptimized.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000001 /* WorkspaceStorageServiceOptimized.swift */; };
+		A20000000000000000000004 /* WorkspaceStorageProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000003 /* WorkspaceStorageProtocol.swift */; };
+		A20000000000000000000006 /* IndexAndCacheService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000005 /* IndexAndCacheService.swift */; };
+		A20000000000000000000008 /* LazyLoadingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000007 /* LazyLoadingService.swift */; };
+		A2000000000000000000000A /* PerformanceProfiler.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000009 /* PerformanceProfiler.swift */; };
+		A2000000000000000000000C /* WorkspaceViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000B /* WorkspaceViewModel.swift */; };
+		A2000000000000000000000E /* SimplePageViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000D /* SimplePageViewModel.swift */; };
+		A20000000000000000000010 /* KanbanBoardViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000F /* KanbanBoardViewModel.swift */; };
+		A20000000000000000000012 /* MockWorkspaceStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000011 /* MockWorkspaceStorage.swift */; };
+		A20000000000000000000014 /* LoadTestHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000013 /* LoadTestHelper.swift */; };
+		A20000000000000000000016 /* ViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000015 /* ViewModelTests.swift */; };
+		A20000000000000000000018 /* IntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000017 /* IntegrationTests.swift */; };
+		1B1D8D6036805C3888D7D77D /* TemplatePickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2FB4B473D4A14DFAC23617C /* TemplatePickerView.swift */; };
+		21A991C05E14C2BAD35ADD5A /* PageVersion.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2DE6E2058775334C4B2C77 /* PageVersion.swift */; };
 		291394502F20FCAF005F8845 /* AppIcon.svg in Resources */ = {isa = PBXBuildFile; fileRef = 2913944F2F20FCAF005F8845 /* AppIcon.svg */; };
+		291394562F26BC7B005F8845 /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; productRef = 291394552F26BC7B005F8845 /* FluidAudio */; };
+		291394582F26BC7B005F8845 /* FluidAudioTTS in Frameworks */ = {isa = PBXBuildFile; productRef = 291394572F26BC7B005F8845 /* FluidAudioTTS */; };
+		2913945A2F26BC7B005F8845 /* fluidaudiocli in Frameworks */ = {isa = PBXBuildFile; productRef = 291394592F26BC7B005F8845 /* fluidaudiocli */; };
+		2E99B1C35517B64A40B7FCF5 /* SimplePageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55C82CA738BD49A7A53C57B9 /* SimplePageView.swift */; };
+		585D971A4485A34D8DDB23C9 /* RelationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF83FA3D2731351BF36D5DAE /* RelationService.swift */; };
+		888FE71CFE6DA3C59BCA851D /* Template.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9876B583FB6F457476711B46 /* Template.swift */; };
+		972DF56220031D323AE0487D /* PageComment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 662A9C25A2B6C77DCCF171BD /* PageComment.swift */; };
 		A1000001201CE000009B0000 /* CoriusVoiceApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001201CE000009B0001 /* CoriusVoiceApp.swift */; };
 		A1000002201CE000009B0000 /* Transcription.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000002201CE000009B0001 /* Transcription.swift */; };
 		A1000003201CE000009B0000 /* Settings.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000003201CE000009B0001 /* Settings.swift */; };
@@ -30,10 +52,97 @@
 		A1000020201CE000009B0000 /* DictionaryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000020201CE000009B0001 /* DictionaryView.swift */; };
 		A1000021201CE000009B0000 /* SnippetsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000021201CE000009B0001 /* SnippetsView.swift */; };
 		A1000022201CE000009B0000 /* FloatingBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000022201CE000009B0001 /* FloatingBarView.swift */; };
+		A1000023201CE000009B0000 /* ContextService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000023201CE000009B0002 /* ContextService.swift */; };
+		A1000024201CE000009B0000 /* RecordingSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000024201CE000009B0003 /* RecordingSession.swift */; };
+		A1000025201CE000009B0000 /* VADService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000025201CE000009B0001 /* VADService.swift */; };
+		A1000026201CE000009B0000 /* SystemAudioCaptureService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000026201CE000009B0001 /* SystemAudioCaptureService.swift */; };
+		A1000027201CE000009B0000 /* SessionRecordingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000027201CE000009B0001 /* SessionRecordingView.swift */; };
+		A1000028201CE000009B0000 /* SpeakerLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000028201CE000009B0001 /* SpeakerLibrary.swift */; };
+		A1000029201CE000009B0000 /* SessionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000029201CE000009B0001 /* SessionsView.swift */; };
+		A1000030201CE000009B0000 /* SessionDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000030201CE000009B0001 /* SessionDetailView.swift */; };
+		A1000031201CE000009B0000 /* SpeakerLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000031201CE000009B0001 /* SpeakerLibraryView.swift */; };
+		A1000032201CE000009B0000 /* AudioFeatureExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000032201CE000009B0001 /* AudioFeatureExtractor.swift */; };
+		A1000033201CE000009B0000 /* VoiceProfileService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000033201CE000009B0001 /* VoiceProfileService.swift */; };
+		A1000034201CE000009B0000 /* LocalDiarizationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000034201CE000009B0001 /* LocalDiarizationService.swift */; };
+		A1000035201CE000009B0000 /* SessionPlaybackView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000035201CE000009B0001 /* SessionPlaybackView.swift */; };
+		A1000036201CE000009B0000 /* OpenRouterModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000036201CE000009B0001 /* OpenRouterModel.swift */; };
+		A1000037201CE000009B0000 /* SessionSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000037201CE000009B0001 /* SessionSummary.swift */; };
+		A1000038201CE000009B0000 /* OpenRouterService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000038201CE000009B0001 /* OpenRouterService.swift */; };
+		A1000039201CE000009B0000 /* ModelPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000039201CE000009B0001 /* ModelPickerView.swift */; };
+		A1000040201CE000009B0000 /* WebMAudioPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000040201CE000009B0001 /* WebMAudioPlayer.swift */; };
+		A1000041201CE000009B0000 /* M4AAudioWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000041201CE000009B0001 /* M4AAudioWriter.swift */; };
+		A1000042201CE000009B0000 /* Folder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000042201CE000009B0001 /* Folder.swift */; };
+		A1000043201CE000009B0000 /* SessionLabel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000043201CE000009B0001 /* SessionLabel.swift */; };
+		A1000044201CE000009B0000 /* ClassificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000044201CE000009B0001 /* ClassificationService.swift */; };
+		A1000045201CE000009B0000 /* FolderTreeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000045201CE000009B0001 /* FolderTreeView.swift */; };
+		A1000046201CE000009B0000 /* FolderTreeViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000046201CE000009B0001 /* FolderTreeViewModel.swift */; };
+		A1000047201CE000009B0000 /* VoiceTrainingRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000047201CE000009B0001 /* VoiceTrainingRecord.swift */; };
+		A1000048201CE000009B0000 /* ChatMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000048201CE000009B0001 /* ChatMessage.swift */; };
+		A1000049201CE000009B0000 /* SpeakerChatService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000049201CE000009B0001 /* SpeakerChatService.swift */; };
+		A1000050201CE000009B0000 /* SpeakerSessionsTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000050201CE000009B0001 /* SpeakerSessionsTab.swift */; };
+		A1000051201CE000009B0000 /* SpeakerTrainingTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000051201CE000009B0001 /* SpeakerTrainingTab.swift */; };
+		A1000052201CE000009B0000 /* SpeakerChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000052201CE000009B0001 /* SpeakerChatView.swift */; };
+		A1000053201CE000009B0000 /* WhisperService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000053201CE000009B0001 /* WhisperService.swift */; };
+		A1000054201CE000009B0000 /* SwiftDataModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000054201CE000009B0001 /* SwiftDataModels.swift */; };
+		A1000055201CE000009B0000 /* SwiftDataService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000055201CE000009B0001 /* SwiftDataService.swift */; };
+		A1000056201CE000009B0000 /* WorkspaceItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000056201CE000009B0001 /* WorkspaceItem.swift */; };
+		A1000057201CE000009B0000 /* Property.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000057201CE000009B0001 /* Property.swift */; };
+		A1000058201CE000009B0000 /* Block.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000058201CE000009B0001 /* Block.swift */; };
+		A1000059201CE000009B0000 /* Database.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000059201CE000009B0001 /* Database.swift */; };
+		A1000060201CE000009B0000 /* WorkspaceStorageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000060201CE000009B0001 /* WorkspaceStorageService.swift */; };
+		A1000061201CE000009B0000 /* WorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000061201CE000009B0001 /* WorkspaceView.swift */; };
+		A1000062201CE000009B0000 /* KanbanBoardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000062201CE000009B0001 /* KanbanBoardView.swift */; };
+		A1000063201CE000009B0000 /* KanbanColumnView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000063201CE000009B0001 /* KanbanColumnView.swift */; };
+		A1000064201CE000009B0000 /* KanbanCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000064201CE000009B0001 /* KanbanCardView.swift */; };
+		A1000065201CE000009B0000 /* BlockEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000065201CE000009B0001 /* BlockEditorView.swift */; };
+		A1000066201CE000009B0000 /* BlockRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000066201CE000009B0001 /* BlockRowView.swift */; };
+		A1000067201CE000009B0000 /* PageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000067201CE000009B0001 /* PageView.swift */; };
+		A1000068201CE000009B0000 /* SessionIntegrationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000068201CE000009B0001 /* SessionIntegrationService.swift */; };
+		A1000069201CE000009B0000 /* WorkspaceVoiceCommandsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000069201CE000009B0001 /* WorkspaceVoiceCommandsService.swift */; };
+		A1000099201CE000009B0000 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A1000099201CE000009B0001 /* Assets.xcassets */; };
+		A1000100201CE000009B0001 /* ffmpeg in Resources */ = {isa = PBXBuildFile; fileRef = A1000100201CE000009B0000 /* ffmpeg */; };
+		A10001022F28000009B00003 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = A10001012F28000009B00002 /* WhisperKit */; };
+		A1ADA7ECAB7B4668AE4C7FB0 /* RelationViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1983F2D4DA4D705DC8DF45A0 /* RelationViews.swift */; };
+		B2000000201CE000009B1003 /* CoriusVoiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000000201CE000009B1001 /* CoriusVoiceTests.swift */; };
+		ED95134531FDC506C0CBE1E9 /* TemplateService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1AFA26B622628BF02256B87 /* TemplateService.swift */; };
+		EE65350623814956D3B4085F /* LinkedDatabase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 555FF98FC0FE5D6201B4023B /* LinkedDatabase.swift */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		A20000000000000000000020 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A1000000201CE000009BFFF7 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A1000000201CE000009BFFFE;
+			remoteInfo = CoriusVoice;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
+		043407DB84D708241930F361 /* WebMDecoder.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WebMDecoder.swift; sourceTree = "<group>"; };
+		A20000000000000000000001 /* WorkspaceStorageServiceOptimized.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceStorageServiceOptimized.swift; sourceTree = "<group>"; };
+		A20000000000000000000003 /* WorkspaceStorageProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceStorageProtocol.swift; sourceTree = "<group>"; };
+		A20000000000000000000005 /* IndexAndCacheService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IndexAndCacheService.swift; sourceTree = "<group>"; };
+		A20000000000000000000007 /* LazyLoadingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LazyLoadingService.swift; sourceTree = "<group>"; };
+		A20000000000000000000009 /* PerformanceProfiler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformanceProfiler.swift; sourceTree = "<group>"; };
+		A2000000000000000000000B /* WorkspaceViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceViewModel.swift; sourceTree = "<group>"; };
+		A2000000000000000000000D /* SimplePageViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SimplePageViewModel.swift; sourceTree = "<group>"; };
+		A2000000000000000000000F /* KanbanBoardViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KanbanBoardViewModel.swift; sourceTree = "<group>"; };
+		A20000000000000000000011 /* MockWorkspaceStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockWorkspaceStorage.swift; sourceTree = "<group>"; };
+		A20000000000000000000013 /* LoadTestHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoadTestHelper.swift; sourceTree = "<group>"; };
+		A20000000000000000000015 /* ViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewModelTests.swift; sourceTree = "<group>"; };
+		A20000000000000000000017 /* IntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntegrationTests.swift; sourceTree = "<group>"; };
+		1983F2D4DA4D705DC8DF45A0 /* RelationViews.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RelationViews.swift; sourceTree = "<group>"; };
 		2913944F2F20FCAF005F8845 /* AppIcon.svg */ = {isa = PBXFileReference; lastKnownFileType = text; path = AppIcon.svg; sourceTree = "<group>"; };
+		291394512F2100FB005F8845 /* DEBUG_GUIDE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = DEBUG_GUIDE.md; sourceTree = "<group>"; };
+		291394522F21017D005F8845 /* SETTINGS_FIX.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = SETTINGS_FIX.md; sourceTree = "<group>"; };
+		291394532F210217005F8845 /* FINAL_FIX.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = FINAL_FIX.md; sourceTree = "<group>"; };
+		2913945D2F316978005F8845 /* Tests.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; path = Tests.xctestplan; sourceTree = "<group>"; };
+		4A2DE6E2058775334C4B2C77 /* PageVersion.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PageVersion.swift; sourceTree = "<group>"; };
+		555FF98FC0FE5D6201B4023B /* LinkedDatabase.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LinkedDatabase.swift; sourceTree = "<group>"; };
+		55C82CA738BD49A7A53C57B9 /* SimplePageView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SimplePageView.swift; path = CoriusVoice/Views/Workspace/SimplePageView.swift; sourceTree = "<group>"; };
+		662A9C25A2B6C77DCCF171BD /* PageComment.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PageComment.swift; sourceTree = "<group>"; };
+		9876B583FB6F457476711B46 /* Template.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Template.swift; sourceTree = "<group>"; };
 		A1000000201CE000009B0000 /* CoriusVoice.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CoriusVoice.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A1000001201CE000009B0001 /* CoriusVoiceApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoriusVoiceApp.swift; sourceTree = "<group>"; };
 		A1000002201CE000009B0001 /* Transcription.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Transcription.swift; sourceTree = "<group>"; };
@@ -58,11 +167,76 @@
 		A1000021201CE000009B0001 /* SnippetsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnippetsView.swift; sourceTree = "<group>"; };
 		A1000022201CE000009B0001 /* FloatingBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingBarView.swift; sourceTree = "<group>"; };
 		A1000023201CE000009B0001 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A1000023201CE000009B0002 /* ContextService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContextService.swift; sourceTree = "<group>"; };
 		A1000024201CE000009B0001 /* CoriusVoice.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CoriusVoice.entitlements; sourceTree = "<group>"; };
+		A1000024201CE000009B0003 /* RecordingSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingSession.swift; sourceTree = "<group>"; };
+		A1000025201CE000009B0001 /* VADService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VADService.swift; sourceTree = "<group>"; };
+		A1000026201CE000009B0001 /* SystemAudioCaptureService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemAudioCaptureService.swift; sourceTree = "<group>"; };
+		A1000027201CE000009B0001 /* SessionRecordingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionRecordingView.swift; sourceTree = "<group>"; };
+		A1000028201CE000009B0001 /* SpeakerLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakerLibrary.swift; sourceTree = "<group>"; };
+		A1000029201CE000009B0001 /* SessionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionsView.swift; sourceTree = "<group>"; };
+		A1000030201CE000009B0001 /* SessionDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionDetailView.swift; sourceTree = "<group>"; };
+		A1000031201CE000009B0001 /* SpeakerLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakerLibraryView.swift; sourceTree = "<group>"; };
+		A1000032201CE000009B0001 /* AudioFeatureExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioFeatureExtractor.swift; sourceTree = "<group>"; };
+		A1000033201CE000009B0001 /* VoiceProfileService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceProfileService.swift; sourceTree = "<group>"; };
+		A1000034201CE000009B0001 /* LocalDiarizationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalDiarizationService.swift; sourceTree = "<group>"; };
+		A1000035201CE000009B0001 /* SessionPlaybackView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionPlaybackView.swift; sourceTree = "<group>"; };
+		A1000036201CE000009B0001 /* OpenRouterModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenRouterModel.swift; sourceTree = "<group>"; };
+		A1000037201CE000009B0001 /* SessionSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionSummary.swift; sourceTree = "<group>"; };
+		A1000038201CE000009B0001 /* OpenRouterService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenRouterService.swift; sourceTree = "<group>"; };
+		A1000039201CE000009B0001 /* ModelPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelPickerView.swift; sourceTree = "<group>"; };
+		A1000040201CE000009B0001 /* WebMAudioPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebMAudioPlayer.swift; sourceTree = "<group>"; };
+		A1000041201CE000009B0001 /* M4AAudioWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = M4AAudioWriter.swift; sourceTree = "<group>"; };
+		A1000042201CE000009B0001 /* Folder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Folder.swift; sourceTree = "<group>"; };
+		A1000043201CE000009B0001 /* SessionLabel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionLabel.swift; sourceTree = "<group>"; };
+		A1000044201CE000009B0001 /* ClassificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClassificationService.swift; sourceTree = "<group>"; };
+		A1000045201CE000009B0001 /* FolderTreeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderTreeView.swift; sourceTree = "<group>"; };
+		A1000046201CE000009B0001 /* FolderTreeViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderTreeViewModel.swift; sourceTree = "<group>"; };
+		A1000047201CE000009B0001 /* VoiceTrainingRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceTrainingRecord.swift; sourceTree = "<group>"; };
+		A1000048201CE000009B0001 /* ChatMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatMessage.swift; sourceTree = "<group>"; };
+		A1000049201CE000009B0001 /* SpeakerChatService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakerChatService.swift; sourceTree = "<group>"; };
+		A1000050201CE000009B0001 /* SpeakerSessionsTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakerSessionsTab.swift; sourceTree = "<group>"; };
+		A1000051201CE000009B0001 /* SpeakerTrainingTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakerTrainingTab.swift; sourceTree = "<group>"; };
+		A1000052201CE000009B0001 /* SpeakerChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakerChatView.swift; sourceTree = "<group>"; };
+		A1000053201CE000009B0001 /* WhisperService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhisperService.swift; sourceTree = "<group>"; };
+		A1000054201CE000009B0001 /* SwiftDataModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftDataModels.swift; sourceTree = "<group>"; };
+		A1000055201CE000009B0001 /* SwiftDataService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftDataService.swift; sourceTree = "<group>"; };
+		A1000056201CE000009B0001 /* WorkspaceItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceItem.swift; sourceTree = "<group>"; };
+		A1000057201CE000009B0001 /* Property.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Property.swift; sourceTree = "<group>"; };
+		A1000058201CE000009B0001 /* Block.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Block.swift; sourceTree = "<group>"; };
+		A1000059201CE000009B0001 /* Database.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Database.swift; sourceTree = "<group>"; };
+		A1000060201CE000009B0001 /* WorkspaceStorageService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceStorageService.swift; sourceTree = "<group>"; };
+		A1000061201CE000009B0001 /* WorkspaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceView.swift; sourceTree = "<group>"; };
+		A1000062201CE000009B0001 /* KanbanBoardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KanbanBoardView.swift; sourceTree = "<group>"; };
+		A1000063201CE000009B0001 /* KanbanColumnView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KanbanColumnView.swift; sourceTree = "<group>"; };
+		A1000064201CE000009B0001 /* KanbanCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KanbanCardView.swift; sourceTree = "<group>"; };
+		A1000065201CE000009B0001 /* BlockEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlockEditorView.swift; sourceTree = "<group>"; };
+		A1000066201CE000009B0001 /* BlockRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlockRowView.swift; sourceTree = "<group>"; };
+		A1000067201CE000009B0001 /* PageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PageView.swift; sourceTree = "<group>"; };
+		A1000068201CE000009B0001 /* SessionIntegrationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionIntegrationService.swift; sourceTree = "<group>"; };
+		A1000069201CE000009B0001 /* WorkspaceVoiceCommandsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceVoiceCommandsService.swift; sourceTree = "<group>"; };
+		A1000099201CE000009B0001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		A1000100201CE000009B0000 /* ffmpeg */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.executable"; path = ffmpeg; sourceTree = "<group>"; };
+		B1AFA26B622628BF02256B87 /* TemplateService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TemplateService.swift; sourceTree = "<group>"; };
+		B2000000201CE000009B1001 /* CoriusVoiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoriusVoiceTests.swift; sourceTree = "<group>"; };
+		B2000000201CE000009B1002 /* CoriusVoiceTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CoriusVoiceTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		BF83FA3D2731351BF36D5DAE /* RelationService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RelationService.swift; sourceTree = "<group>"; };
+		E2FB4B473D4A14DFAC23617C /* TemplatePickerView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TemplatePickerView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		A1000000201CE000009BFFFD /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				291394582F26BC7B005F8845 /* FluidAudioTTS in Frameworks */,
+				2913945A2F26BC7B005F8845 /* fluidaudiocli in Frameworks */,
+				291394562F26BC7B005F8845 /* FluidAudio in Frameworks */,
+				A10001022F28000009B00003 /* WhisperKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B2000000201CE000009B1006 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -75,8 +249,14 @@
 		A1000000201CE000009BFFF0 = {
 			isa = PBXGroup;
 			children = (
+				2913945D2F316978005F8845 /* Tests.xctestplan */,
 				A1000000201CE000009BFFF1 /* CoriusVoice */,
+				B2000000201CE000009B1008 /* CoriusVoiceTests */,
 				A1000000201CE000009BFFFF /* Products */,
+				291394512F2100FB005F8845 /* DEBUG_GUIDE.md */,
+				291394522F21017D005F8845 /* SETTINGS_FIX.md */,
+				291394532F210217005F8845 /* FINAL_FIX.md */,
+				55C82CA738BD49A7A53C57B9 /* SimplePageView.swift */,
 			);
 			sourceTree = "<group>";
 		};
@@ -86,9 +266,13 @@
 				A1000001201CE000009B0001 /* CoriusVoiceApp.swift */,
 				A1000023201CE000009B0001 /* Info.plist */,
 				A1000024201CE000009B0001 /* CoriusVoice.entitlements */,
+				A1000099201CE000009B0001 /* Assets.xcassets */,
+				A1000100201CE000009BFFF0 /* Resources */,
 				A1000000201CE000009BFFF2 /* Models */,
 				A1000000201CE000009BFFF3 /* Services */,
 				A1000000201CE000009BFFF4 /* Views */,
+				A1000047201CE000009BFFF0 /* ViewModels */,
+				A20000000000000000000019 /* Testing */,
 				A1000000201CE000009BFFF5 /* Utilities */,
 			);
 			path = CoriusVoice;
@@ -102,6 +286,16 @@
 				A1000004201CE000009B0001 /* DictionaryEntry.swift */,
 				A1000005201CE000009B0001 /* Snippet.swift */,
 				A1000006201CE000009B0001 /* Note.swift */,
+				A1000024201CE000009B0003 /* RecordingSession.swift */,
+				A1000028201CE000009B0001 /* SpeakerLibrary.swift */,
+				A1000036201CE000009B0001 /* OpenRouterModel.swift */,
+				A1000037201CE000009B0001 /* SessionSummary.swift */,
+				A1000042201CE000009B0001 /* Folder.swift */,
+				A1000043201CE000009B0001 /* SessionLabel.swift */,
+				A1000047201CE000009B0001 /* VoiceTrainingRecord.swift */,
+				A1000048201CE000009B0001 /* ChatMessage.swift */,
+				A1000054201CE000009B0001 /* SwiftDataModels.swift */,
+				A1000065201CE000009BFFF0 /* Workspace */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -113,10 +307,34 @@
 				A1000008201CE000009B0001 /* StorageService.swift */,
 				A1000009201CE000009B0001 /* AudioCaptureService.swift */,
 				A1000010201CE000009B0001 /* DeepgramService.swift */,
+				A1000053201CE000009B0001 /* WhisperService.swift */,
 				A1000011201CE000009B0001 /* KeyboardService.swift */,
 				A1000012201CE000009B0001 /* TextCleanupService.swift */,
 				A1000013201CE000009B0001 /* RecordingService.swift */,
+				A1000023201CE000009B0002 /* ContextService.swift */,
+				A1000025201CE000009B0001 /* VADService.swift */,
+				A1000026201CE000009B0001 /* SystemAudioCaptureService.swift */,
+				A1000032201CE000009B0001 /* AudioFeatureExtractor.swift */,
+				A1000033201CE000009B0001 /* VoiceProfileService.swift */,
+				A1000034201CE000009B0001 /* LocalDiarizationService.swift */,
+				A1000038201CE000009B0001 /* OpenRouterService.swift */,
+				A1000040201CE000009B0001 /* WebMAudioPlayer.swift */,
+				A1000041201CE000009B0001 /* M4AAudioWriter.swift */,
+				A1000044201CE000009B0001 /* ClassificationService.swift */,
+				A1000049201CE000009B0001 /* SpeakerChatService.swift */,
+				A1000055201CE000009B0001 /* SwiftDataService.swift */,
+				A1000060201CE000009B0001 /* WorkspaceStorageService.swift */,
+				A20000000000000000000001 /* WorkspaceStorageServiceOptimized.swift */,
+				A20000000000000000000003 /* WorkspaceStorageProtocol.swift */,
+				A20000000000000000000005 /* IndexAndCacheService.swift */,
+				A20000000000000000000007 /* LazyLoadingService.swift */,
+				A20000000000000000000009 /* PerformanceProfiler.swift */,
+				A1000068201CE000009B0001 /* SessionIntegrationService.swift */,
+				A1000069201CE000009B0001 /* WorkspaceVoiceCommandsService.swift */,
 				2913944F2F20FCAF005F8845 /* AppIcon.svg */,
+				043407DB84D708241930F361 /* WebMDecoder.swift */,
+				B1AFA26B622628BF02256B87 /* TemplateService.swift */,
+				BF83FA3D2731351BF36D5DAE /* RelationService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -131,6 +349,17 @@
 				A1000020201CE000009B0001 /* DictionaryView.swift */,
 				A1000021201CE000009B0001 /* SnippetsView.swift */,
 				A1000022201CE000009B0001 /* FloatingBarView.swift */,
+				A1000027201CE000009B0001 /* SessionRecordingView.swift */,
+				A1000029201CE000009B0001 /* SessionsView.swift */,
+				A1000030201CE000009B0001 /* SessionDetailView.swift */,
+				A1000031201CE000009B0001 /* SpeakerLibraryView.swift */,
+				A1000035201CE000009B0001 /* SessionPlaybackView.swift */,
+				A1000039201CE000009B0001 /* ModelPickerView.swift */,
+				A1000045201CE000009B0001 /* FolderTreeView.swift */,
+				A1000050201CE000009B0001 /* SpeakerSessionsTab.swift */,
+				A1000051201CE000009B0001 /* SpeakerTrainingTab.swift */,
+				A1000052201CE000009B0001 /* SpeakerChatView.swift */,
+				A1000066201CE000009BFFF0 /* Workspace */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -148,8 +377,94 @@
 			isa = PBXGroup;
 			children = (
 				A1000000201CE000009B0000 /* CoriusVoice.app */,
+				B2000000201CE000009B1002 /* CoriusVoiceTests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		A1000047201CE000009BFFF0 /* ViewModels */ = {
+			isa = PBXGroup;
+			children = (
+				A1000046201CE000009B0001 /* FolderTreeViewModel.swift */,
+				A2000000000000000000000B /* WorkspaceViewModel.swift */,
+				A2000000000000000000000D /* SimplePageViewModel.swift */,
+				A2000000000000000000000F /* KanbanBoardViewModel.swift */,
+			);
+			path = ViewModels;
+			sourceTree = "<group>";
+		};
+		A20000000000000000000019 /* Testing */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000011 /* MockWorkspaceStorage.swift */,
+				A20000000000000000000013 /* LoadTestHelper.swift */,
+			);
+			path = Testing;
+			sourceTree = "<group>";
+		};
+		A1000065201CE000009BFFF0 /* Workspace */ = {
+			isa = PBXGroup;
+			children = (
+				A1000056201CE000009B0001 /* WorkspaceItem.swift */,
+				A1000057201CE000009B0001 /* Property.swift */,
+				A1000058201CE000009B0001 /* Block.swift */,
+				A1000059201CE000009B0001 /* Database.swift */,
+				662A9C25A2B6C77DCCF171BD /* PageComment.swift */,
+				9876B583FB6F457476711B46 /* Template.swift */,
+				555FF98FC0FE5D6201B4023B /* LinkedDatabase.swift */,
+				4A2DE6E2058775334C4B2C77 /* PageVersion.swift */,
+			);
+			path = Workspace;
+			sourceTree = "<group>";
+		};
+		A1000066201CE000009BFFF0 /* Workspace */ = {
+			isa = PBXGroup;
+			children = (
+				A1000061201CE000009B0001 /* WorkspaceView.swift */,
+				A1000067201CE000009BFFF0 /* Kanban */,
+				A1000070201CE000009BFFF0 /* BlockEditor */,
+				E2FB4B473D4A14DFAC23617C /* TemplatePickerView.swift */,
+				1983F2D4DA4D705DC8DF45A0 /* RelationViews.swift */,
+			);
+			path = Workspace;
+			sourceTree = "<group>";
+		};
+		A1000067201CE000009BFFF0 /* Kanban */ = {
+			isa = PBXGroup;
+			children = (
+				A1000062201CE000009B0001 /* KanbanBoardView.swift */,
+				A1000063201CE000009B0001 /* KanbanColumnView.swift */,
+				A1000064201CE000009B0001 /* KanbanCardView.swift */,
+			);
+			path = Kanban;
+			sourceTree = "<group>";
+		};
+		A1000070201CE000009BFFF0 /* BlockEditor */ = {
+			isa = PBXGroup;
+			children = (
+				A1000065201CE000009B0001 /* BlockEditorView.swift */,
+				A1000066201CE000009B0001 /* BlockRowView.swift */,
+				A1000067201CE000009B0001 /* PageView.swift */,
+			);
+			path = BlockEditor;
+			sourceTree = "<group>";
+		};
+		A1000100201CE000009BFFF0 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				A1000100201CE000009B0000 /* ffmpeg */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		B2000000201CE000009B1008 /* CoriusVoiceTests */ = {
+			isa = PBXGroup;
+			children = (
+				B2000000201CE000009B1001 /* CoriusVoiceTests.swift */,
+				A20000000000000000000015 /* ViewModelTests.swift */,
+				A20000000000000000000017 /* IntegrationTests.swift */,
+			);
+			path = CoriusVoiceTests;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -172,6 +487,24 @@
 			productReference = A1000000201CE000009B0000 /* CoriusVoice.app */;
 			productType = "com.apple.product-type.application";
 		};
+		B2000000201CE000009B1007 /* CoriusVoiceTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B2000000201CE000009B1011 /* Build configuration list for PBXNativeTarget "CoriusVoiceTests" */;
+			buildPhases = (
+				B2000000201CE000009B1004 /* Sources */,
+				B2000000201CE000009B1006 /* Frameworks */,
+				B2000000201CE000009B1005 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A20000000000000000000021 /* PBXTargetDependency */,
+			);
+			name = CoriusVoiceTests;
+			productName = CoriusVoiceTests;
+			productReference = B2000000201CE000009B1002 /* CoriusVoiceTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -180,10 +513,14 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 1500;
-				LastUpgradeCheck = 1500;
+				LastUpgradeCheck = 2620;
 				TargetAttributes = {
 					A1000000201CE000009BFFFE = {
 						CreatedOnToolsVersion = 15.0;
+					};
+					B2000000201CE000009B1007 = {
+						CreatedOnToolsVersion = 15.0;
+						TestTargetID = A1000000201CE000009BFFFE;
 					};
 				};
 			};
@@ -197,21 +534,43 @@
 				es,
 			);
 			mainGroup = A1000000201CE000009BFFF0;
+			packageReferences = (
+				291394542F26BC7B005F8845 /* XCRemoteSwiftPackageReference "FluidAudio" */,
+				A10001002F28000009B00001 /* XCRemoteSwiftPackageReference "WhisperKit" */,
+			);
 			productRefGroup = A1000000201CE000009BFFFF /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
 				A1000000201CE000009BFFFE /* CoriusVoice */,
+				B2000000201CE000009B1007 /* CoriusVoiceTests */,
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXTargetDependency section */
+		A20000000000000000000021 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A1000000201CE000009BFFFE /* CoriusVoice */;
+			targetProxy = A20000000000000000000020 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin PBXResourcesBuildPhase section */
 		A1000000201CE000009BFFF6 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A1000100201CE000009B0001 /* ffmpeg in Resources */,
 				291394502F20FCAF005F8845 /* AppIcon.svg in Resources */,
+				A1000099201CE000009B0000 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B2000000201CE000009B1005 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -232,9 +591,13 @@
 				A1000008201CE000009B0000 /* StorageService.swift in Sources */,
 				A1000009201CE000009B0000 /* AudioCaptureService.swift in Sources */,
 				A1000010201CE000009B0000 /* DeepgramService.swift in Sources */,
+				A1000053201CE000009B0000 /* WhisperService.swift in Sources */,
+				A1000054201CE000009B0000 /* SwiftDataModels.swift in Sources */,
+				A1000055201CE000009B0000 /* SwiftDataService.swift in Sources */,
 				A1000011201CE000009B0000 /* KeyboardService.swift in Sources */,
 				A1000012201CE000009B0000 /* TextCleanupService.swift in Sources */,
 				A1000013201CE000009B0000 /* RecordingService.swift in Sources */,
+				A1000023201CE000009B0000 /* ContextService.swift in Sources */,
 				A1000014201CE000009B0000 /* Constants.swift in Sources */,
 				A1000015201CE000009B0000 /* Extensions.swift in Sources */,
 				A1000016201CE000009B0000 /* MainView.swift in Sources */,
@@ -244,6 +607,79 @@
 				A1000020201CE000009B0000 /* DictionaryView.swift in Sources */,
 				A1000021201CE000009B0000 /* SnippetsView.swift in Sources */,
 				A1000022201CE000009B0000 /* FloatingBarView.swift in Sources */,
+				A1000024201CE000009B0000 /* RecordingSession.swift in Sources */,
+				A1000025201CE000009B0000 /* VADService.swift in Sources */,
+				A1000026201CE000009B0000 /* SystemAudioCaptureService.swift in Sources */,
+				A1000027201CE000009B0000 /* SessionRecordingView.swift in Sources */,
+				A1000028201CE000009B0000 /* SpeakerLibrary.swift in Sources */,
+				A1000029201CE000009B0000 /* SessionsView.swift in Sources */,
+				A1000030201CE000009B0000 /* SessionDetailView.swift in Sources */,
+				A1000031201CE000009B0000 /* SpeakerLibraryView.swift in Sources */,
+				A1000032201CE000009B0000 /* AudioFeatureExtractor.swift in Sources */,
+				A1000033201CE000009B0000 /* VoiceProfileService.swift in Sources */,
+				A1000034201CE000009B0000 /* LocalDiarizationService.swift in Sources */,
+				A1000035201CE000009B0000 /* SessionPlaybackView.swift in Sources */,
+				A1000036201CE000009B0000 /* OpenRouterModel.swift in Sources */,
+				A1000037201CE000009B0000 /* SessionSummary.swift in Sources */,
+				A1000038201CE000009B0000 /* OpenRouterService.swift in Sources */,
+				A1000039201CE000009B0000 /* ModelPickerView.swift in Sources */,
+				A1000040201CE000009B0000 /* WebMAudioPlayer.swift in Sources */,
+				A1000041201CE000009B0000 /* M4AAudioWriter.swift in Sources */,
+				A1000042201CE000009B0000 /* Folder.swift in Sources */,
+				A1000043201CE000009B0000 /* SessionLabel.swift in Sources */,
+				A1000044201CE000009B0000 /* ClassificationService.swift in Sources */,
+				A1000045201CE000009B0000 /* FolderTreeView.swift in Sources */,
+				A1000046201CE000009B0000 /* FolderTreeViewModel.swift in Sources */,
+				A1000047201CE000009B0000 /* VoiceTrainingRecord.swift in Sources */,
+				A1000048201CE000009B0000 /* ChatMessage.swift in Sources */,
+				A1000049201CE000009B0000 /* SpeakerChatService.swift in Sources */,
+				A1000050201CE000009B0000 /* SpeakerSessionsTab.swift in Sources */,
+				A1000051201CE000009B0000 /* SpeakerTrainingTab.swift in Sources */,
+				A1000052201CE000009B0000 /* SpeakerChatView.swift in Sources */,
+				A1000056201CE000009B0000 /* WorkspaceItem.swift in Sources */,
+				A1000057201CE000009B0000 /* Property.swift in Sources */,
+				A1000058201CE000009B0000 /* Block.swift in Sources */,
+				A1000059201CE000009B0000 /* Database.swift in Sources */,
+				A1000060201CE000009B0000 /* WorkspaceStorageService.swift in Sources */,
+				A20000000000000000000002 /* WorkspaceStorageServiceOptimized.swift in Sources */,
+				A20000000000000000000004 /* WorkspaceStorageProtocol.swift in Sources */,
+				A20000000000000000000006 /* IndexAndCacheService.swift in Sources */,
+				A20000000000000000000008 /* LazyLoadingService.swift in Sources */,
+				A2000000000000000000000A /* PerformanceProfiler.swift in Sources */,
+				A1000061201CE000009B0000 /* WorkspaceView.swift in Sources */,
+				A1000062201CE000009B0000 /* KanbanBoardView.swift in Sources */,
+				A1000063201CE000009B0000 /* KanbanColumnView.swift in Sources */,
+				A1000064201CE000009B0000 /* KanbanCardView.swift in Sources */,
+				A1000065201CE000009B0000 /* BlockEditorView.swift in Sources */,
+				A1000066201CE000009B0000 /* BlockRowView.swift in Sources */,
+				A1000067201CE000009B0000 /* PageView.swift in Sources */,
+				A1000068201CE000009B0000 /* SessionIntegrationService.swift in Sources */,
+				A1000069201CE000009B0000 /* WorkspaceVoiceCommandsService.swift in Sources */,
+				A2000000000000000000000C /* WorkspaceViewModel.swift in Sources */,
+				A2000000000000000000000E /* SimplePageViewModel.swift in Sources */,
+				A20000000000000000000010 /* KanbanBoardViewModel.swift in Sources */,
+				02F0C57C7EE5616AAB2D13DA /* WebMDecoder.swift in Sources */,
+				972DF56220031D323AE0487D /* PageComment.swift in Sources */,
+				888FE71CFE6DA3C59BCA851D /* Template.swift in Sources */,
+				EE65350623814956D3B4085F /* LinkedDatabase.swift in Sources */,
+				ED95134531FDC506C0CBE1E9 /* TemplateService.swift in Sources */,
+				585D971A4485A34D8DDB23C9 /* RelationService.swift in Sources */,
+				1B1D8D6036805C3888D7D77D /* TemplatePickerView.swift in Sources */,
+				A1ADA7ECAB7B4668AE4C7FB0 /* RelationViews.swift in Sources */,
+				21A991C05E14C2BAD35ADD5A /* PageVersion.swift in Sources */,
+				2E99B1C35517B64A40B7FCF5 /* SimplePageView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B2000000201CE000009B1004 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B2000000201CE000009B1003 /* CoriusVoiceTests.swift in Sources */,
+				A20000000000000000000012 /* MockWorkspaceStorage.swift in Sources */,
+				A20000000000000000000014 /* LoadTestHelper.swift in Sources */,
+				A20000000000000000000016 /* ViewModelTests.swift in Sources */,
+				A20000000000000000000018 /* IntegrationTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -255,6 +691,7 @@
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
@@ -284,6 +721,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
@@ -303,11 +741,12 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
-				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
@@ -318,12 +757,18 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				AUTOMATION_APPLE_EVENTS = YES;
 				CODE_SIGN_ENTITLEMENTS = CoriusVoice/CoriusVoice.entitlements;
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = M3P344LQ5M;
+				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = CoriusVoice/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
@@ -346,6 +791,7 @@
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
@@ -375,6 +821,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -388,10 +835,11 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
-				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 			};
 			name = Release;
@@ -401,12 +849,18 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				AUTOMATION_APPLE_EVENTS = YES;
 				CODE_SIGN_ENTITLEMENTS = CoriusVoice/CoriusVoice.entitlements;
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = M3P344LQ5M;
+				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = CoriusVoice/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
@@ -421,6 +875,53 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		B2000000201CE000009B1009 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = M3P344LQ5M;
+				ENABLE_TESTABILITY = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = CoriusVoiceTests;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.corius.voice.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/CoriusVoice.app/Contents/MacOS/CoriusVoice";
+			};
+			name = Debug;
+		};
+		B2000000201CE000009B1010 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = M3P344LQ5M;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = CoriusVoiceTests;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.corius.voice.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/CoriusVoice.app/Contents/MacOS/CoriusVoice";
 			};
 			name = Release;
 		};
@@ -445,7 +946,58 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		B2000000201CE000009B1011 /* Build configuration list for PBXNativeTarget "CoriusVoiceTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B2000000201CE000009B1009 /* Debug */,
+				B2000000201CE000009B1010 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		291394542F26BC7B005F8845 /* XCRemoteSwiftPackageReference "FluidAudio" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/FluidInference/FluidAudio.git";
+			requirement = {
+				branch = main;
+				kind = branch;
+			};
+		};
+		A10001002F28000009B00001 /* XCRemoteSwiftPackageReference "WhisperKit" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/argmaxinc/WhisperKit.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.9.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		291394552F26BC7B005F8845 /* FluidAudio */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 291394542F26BC7B005F8845 /* XCRemoteSwiftPackageReference "FluidAudio" */;
+			productName = FluidAudio;
+		};
+		291394572F26BC7B005F8845 /* FluidAudioTTS */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 291394542F26BC7B005F8845 /* XCRemoteSwiftPackageReference "FluidAudio" */;
+			productName = FluidAudioTTS;
+		};
+		291394592F26BC7B005F8845 /* fluidaudiocli */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 291394542F26BC7B005F8845 /* XCRemoteSwiftPackageReference "FluidAudio" */;
+			productName = fluidaudiocli;
+		};
+		A10001012F28000009B00002 /* WhisperKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A10001002F28000009B00001 /* XCRemoteSwiftPackageReference "WhisperKit" */;
+			productName = WhisperKit;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = A1000000201CE000009BFFF7 /* Project object */;
 }

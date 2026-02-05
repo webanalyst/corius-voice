@@ -1,0 +1,24 @@
+{
+  "configurations" : [
+    {
+      "id" : "E2FCF8D1-AF9D-488F-A123-D879D14481EA",
+      "name" : "Configuration 1",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+
+  },
+  "testTargets" : [
+    {
+      "target" : {
+        "containerPath" : "container:CoriusVoice.xcodeproj",
+        "identifier" : "B2000000201CE000009B1007",
+        "name" : "CoriusVoiceTests"
+      }
+    }
+  ],
+  "version" : 1
+}

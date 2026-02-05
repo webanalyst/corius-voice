@@ -1,23 +1,28 @@
 # Corius Voice
 
-A voice-to-text app for macOS with real-time transcription using Deepgram, inspired by Wispr Flow.
+A native macOS voice-to-text app with real-time transcription, speaker diarization, and voice profile training.
 
 ## Features
 
-- **Real-time voice transcription** using Deepgram Nova-3
-- **Hybrid recording mode**: Hold Option+Space for quick recordings, or keep holding for continuous mode
+- **Real-time voice transcription** using Deepgram Nova-3 (cloud) or WhisperKit (local)
+- **Speaker diarization** with FluidAudio - identifies who said what
+- **Voice profile training** - train the app to recognize known speakers using 256-dim embeddings
+- **Hybrid recording mode**: Hold Fn key for quick recordings, or use continuous mode
 - **Smart text cleanup**: Automatically removes filler words (um, uh, eh, etc.)
 - **Auto-paste**: Automatically pastes transcribed text into the active app
 - **Custom dictionary**: Define word replacements and corrections
 - **Snippets**: Create text shortcuts that expand when spoken
 - **Voice notes**: Quick note-taking with voice
 - **Floating flow bar**: Visual audio feedback during recording
+- **Session playback**: Review and edit past transcription sessions
+- **AI chat**: Ask questions about your transcriptions using OpenRouter
 
 ## Requirements
 
-- macOS 12.0 or later
-- Node.js 18+
-- Deepgram API key ([Get one free](https://console.deepgram.com))
+- macOS 14.0 or later
+- Xcode 15+
+- Deepgram API key ([Get one free](https://console.deepgram.com)) - for cloud transcription
+- OpenRouter API key (optional) - for AI chat features
 
 ## Installation
 
@@ -27,93 +32,68 @@ git clone https://github.com/yourusername/corius-voice.git
 cd corius-voice
 ```
 
-2. Install dependencies:
+2. Open the Xcode project:
 ```bash
-npm install
+open CoriusVoice.xcodeproj
 ```
 
-3. Create a `.env` file with your Deepgram API key:
-```bash
-cp .env.example .env
-# Edit .env and add your DEEPGRAM_API_KEY
-```
+3. Build and run (⌘R)
 
-4. Start the development server:
-```bash
-npm run dev
-```
+4. Grant permissions when prompted:
+   - **Microphone** - Required for voice transcription
+   - **Accessibility** - Required for Fn key detection and auto-paste
+
+5. Configure your API keys in Settings:
+   - Deepgram API key for cloud transcription
+   - OpenRouter API key for AI chat (optional)
 
 ## Usage
 
-### Keyboard Shortcut
+### Recording
 
-Press **Option+Space** (Alt+Space) to start recording:
+- **Fn key**: Press and hold to record, release to stop and transcribe
+- **Option+Space**: Alternative shortcut for recording
+- **Continuous mode**: Hold for 3+ seconds, then release to continue hands-free
 
-- **Hold-to-record mode**: Hold for less than 3 seconds, release to stop and paste
-- **Continuous mode**: Hold for more than 3 seconds, release to continue recording hands-free
-  - Recording stops automatically after 5 seconds of silence
-  - Or press Option+Space again to stop manually
+### Transcription Modes
 
-### Pages
+- **Cloud (Deepgram)**: Fast, accurate, requires internet. Best for real-time dictation.
+- **Local (Whisper)**: Private, offline. Models are downloaded on first use (~1-2GB).
 
-- **Home**: View your transcription history grouped by date
-- **Dictionary**: Add custom word replacements (e.g., "Q3" → "Q3 Roadmap")
-- **Snippets**: Create text shortcuts (e.g., "linkedin" → "https://linkedin.com/in/yourprofile")
-- **Style**: Choose your preferred writing style (coming soon)
-- **Notes**: Quick voice notes for yourself
-- **Settings**: Configure language, API key, and shortcut behavior
+### Speaker Features
 
-## Permissions
+1. **Diarization**: Enable in Settings to identify different speakers
+2. **Speaker Library**: Add known speakers with custom colors
+3. **Voice Training**: Assign speakers in a session, then train voice profiles
+4. **Auto-identification**: Future recordings can auto-identify trained speakers
 
-Corius Voice requires the following macOS permissions:
-
-1. **Microphone** - Required for voice transcription
-2. **Accessibility** - Optional, enables auto-paste with Cmd+V
-
-## Building
-
-```bash
-# Build for development
-npm run build
-
-# Package for distribution
-npm run dist
-```
-
-## Tech Stack
-
-- **Electron** - Desktop app framework
-- **React 19** - UI framework
-- **Tailwind CSS 4** - Styling
-- **Deepgram SDK** - Real-time speech-to-text
-- **electron-store** - Local data persistence
-- **uiohook-napi** - Global keyboard hooks
-- **Zustand** - State management
-
-## Project Structure
+## Architecture
 
 ```
-corius-voice/
-├── src/
-│   ├── main/                    # Electron main process
-│   │   ├── index.ts             # Entry point, app lifecycle
-│   │   ├── windows/             # Window management
-│   │   ├── services/            # Core services
-│   │   ├── ipc/                 # IPC handlers
-│   │   └── utils/               # Utilities
-│   ├── preload/                 # Preload scripts
-│   ├── renderer/                # Main React app
-│   │   └── src/
-│   │       ├── components/      # UI components
-│   │       ├── pages/           # App pages
-│   │       ├── stores/          # Zustand stores
-│   │       └── lib/             # Utilities
-│   ├── renderer-flowbar/        # Flow bar overlay
-│   └── shared/                  # Shared types and constants
-├── resources/                   # App resources
-└── build/                       # Build configuration
+CoriusVoice/
+├── CoriusVoiceApp.swift        # App entry point & AppState
+├── Models/                     # Data models (RecordingSession, Speaker, Settings, etc.)
+├── Services/                   # Core services
+│   ├── DeepgramService.swift   # Cloud transcription via WebSocket
+│   ├── WhisperService.swift    # Local transcription with WhisperKit
+│   ├── LocalDiarizationService.swift  # FluidAudio diarization + embeddings
+│   ├── VoiceProfileService.swift      # Voice training & identification
+│   ├── RecordingService.swift  # Recording orchestration
+│   └── ...
+├── Views/                      # SwiftUI views
+└── ViewModels/                 # View models
 ```
+
+## Voice Identification
+
+Corius Voice uses two methods for speaker identification:
+
+1. **Modern (Embeddings)**: 256-dimensional speaker embeddings from FluidAudio's WeSpeaker model. Higher accuracy, requires macOS 14+.
+
+2. **Legacy (Features)**: MFCCs, pitch, and energy features. Works on older macOS, serves as fallback.
+
+Training prioritizes embeddings when available, falling back to legacy features only when necessary.
 
 ## License
 
-MIT
+MIT License - see LICENSE file for details.

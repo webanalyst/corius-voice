@@ -197,9 +197,13 @@ struct SnippetSheet: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
 
-                    TextEditor(text: $content)
-                        .frame(minHeight: 100)
-                        .border(Color.gray.opacity(0.3))
+                    CommitTextView(
+                        text: $content,
+                        onCommit: { },
+                        onCancel: { }
+                    )
+                    .frame(minHeight: 100)
+                    .border(Color.gray.opacity(0.3))
                 }
             }
             .formStyle(.grouped)

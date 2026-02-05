@@ -36,5 +36,20 @@
 	<array>
 		<string>audio</string>
 	</array>
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>Corius Voice Session Drag Item</string>
+			<key>UTTypeIdentifier</key>
+			<string>com.coriusvoice.session-drag-item</string>
+			<key>UTTypeTagSpecification</key>
+			<dict/>
+		</dict>
+	</array>
 </dict>
 </plist>

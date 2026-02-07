@@ -1494,6 +1494,23 @@ struct DatabaseEmbedBlockView: View {
         block.metadata["relationProperty"]
     }
 
+    private var relationPropertyID: UUID? {
+        guard let raw = block.metadata["relationPropertyID"] else { return nil }
+        return UUID(uuidString: raw)
+    }
+
+    private var relationPropertyDefinition: PropertyDefinition? {
+        guard let database = linkedDatabase else { return nil }
+        if let relationPropertyID,
+           let byID = database.properties.first(where: { $0.id == relationPropertyID }) {
+            return byID
+        }
+        if let relationPropertyName {
+            return database.properties.first(where: { $0.name == relationPropertyName })
+        }
+        return nil
+    }
+
     private var relationTargetID: UUID? {
         guard let raw = block.metadata["relationTargetID"] else { return nil }
         return UUID(uuidString: raw)
@@ -1514,6 +1531,25 @@ struct DatabaseEmbedBlockView: View {
             return value
         }
         return linkedDatabase?.defaultView ?? .kanban
+    }
+
+    private var selectedViewID: UUID? {
+        guard let raw = block.metadata["viewID"] else { return nil }
+        return UUID(uuidString: raw)
+    }
+
+    private var viewsForCurrentType: [DatabaseView] {
+        guard let database = linkedDatabase else { return [] }
+        return database.views.filter { $0.type == viewType }
+    }
+
+    private var activeView: DatabaseView? {
+        guard linkedDatabase != nil else { return nil }
+        if let selectedViewID,
+           let selected = viewsForCurrentType.first(where: { $0.id == selectedViewID }) {
+            return selected
+        }
+        return viewsForCurrentType.first
     }
 
     var body: some View {
@@ -1548,6 +1584,7 @@ struct DatabaseEmbedBlockView: View {
                         ForEach(DatabaseViewType.allCases, id: \.self) { type in
                             Button(type.displayName) {
                                 block.metadata["viewType"] = type.rawValue
+                                block.metadata.removeValue(forKey: "viewID")
                             }
                         }
                     } label: {
@@ -1559,6 +1596,28 @@ struct DatabaseEmbedBlockView: View {
                             .cornerRadius(4)
                     }
                     .menuStyle(.borderlessButton)
+
+                    if !viewsForCurrentType.isEmpty {
+                        Menu {
+                            ForEach(viewsForCurrentType) { view in
+                                Button(view.name) {
+                                    block.metadata["viewID"] = view.id.uuidString
+                                }
+                            }
+                            Divider()
+                            Button("Default") {
+                                block.metadata.removeValue(forKey: "viewID")
+                            }
+                        } label: {
+                            Text(activeView?.name ?? "Default view")
+                                .font(.caption)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color.secondary.opacity(0.15))
+                                .cornerRadius(4)
+                        }
+                        .menuStyle(.borderlessButton)
+                    }
                 }
                 .padding(12)
                 .background(Color(NSColor.textBackgroundColor))
@@ -1638,16 +1697,18 @@ struct DatabaseEmbedBlockView: View {
                 Menu {
                     Button("None") {
                         block.metadata.removeValue(forKey: "relationProperty")
+                        block.metadata.removeValue(forKey: "relationPropertyID")
                         block.metadata.removeValue(forKey: "relationTargetID")
                     }
                     Divider()
                     ForEach(relationProperties) { property in
                         Button(property.name) {
                             block.metadata["relationProperty"] = property.name
+                            block.metadata["relationPropertyID"] = property.id.uuidString
                         }
                     }
                 } label: {
-                    Text(relationPropertyName ?? "Relation property")
+                    Text(relationPropertyDefinition?.name ?? relationPropertyName ?? "Relation property")
                         .font(.caption)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
@@ -1661,7 +1722,7 @@ struct DatabaseEmbedBlockView: View {
                         .font(.caption)
                 }
                 .buttonStyle(.borderless)
-                .disabled(relationPropertyName == nil)
+                .disabled(relationPropertyDefinition == nil && relationPropertyName == nil)
 
                 Spacer()
             }
@@ -1671,7 +1732,7 @@ struct DatabaseEmbedBlockView: View {
 
     @ViewBuilder
     private func embeddedPreview(for database: Database) -> some View {
-        let items = filteredItems(for: database).sorted { $0.updatedAt > $1.updatedAt }
+        let items = filteredItems(for: database)
         switch viewType {
         case .list:
             VStack(alignment: .leading, spacing: 8) {
@@ -1786,41 +1847,41 @@ struct DatabaseEmbedBlockView: View {
 
         case .calendar:
             CalendarPreviewView(items: items, database: database)
-
-        default:
-            Text("Preview not available for \(viewType.displayName) yet")
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .padding(12)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color(NSColor.controlBackgroundColor).opacity(0.4))
-                .cornerRadius(8)
         }
     }
 
     private func filteredItems(for database: Database) -> [WorkspaceItem] {
         var results = storage.items(inDatabase: database.id)
-        guard let propertyName = relationPropertyName,
-              let targetID = relationTargetID else { return results }
-        let key = storageKey(for: propertyName, in: database)
-        results = results.filter { item in
-            switch item.properties[key] {
-            case .relation(let id):
-                return id == targetID
-            case .relations(let ids):
-                return ids.contains(targetID)
-            default:
+        if let targetID = relationTargetID,
+           let relationDefinition = relationPropertyDefinition {
+            let key = relationDefinition.storageKey
+            let legacyKey = PropertyDefinition.legacyKey(for: relationDefinition.name)
+            results = results.filter { item in
+                for propertyKey in [key, legacyKey] {
+                    switch item.properties[propertyKey] {
+                    case .relation(let id):
+                        if id == targetID { return true }
+                    case .relations(let ids):
+                        if ids.contains(targetID) { return true }
+                    default:
+                        continue
+                    }
+                }
                 return false
             }
         }
-        return results
-    }
 
-    private func storageKey(for name: String, in database: Database) -> String {
-        if let definition = database.properties.first(where: { $0.name == name }) {
-            return definition.storageKey
+        if let activeView {
+            return DatabaseViewQueryEngine.apply(
+                filters: activeView.filters,
+                sorts: activeView.sorts,
+                to: results,
+                database: database,
+                storage: storage
+            )
         }
-        return PropertyDefinition.legacyKey(for: name)
+
+        return results.sorted { $0.updatedAt > $1.updatedAt }
     }
 
     private func statusValue(for item: WorkspaceItem, database: Database) -> String? {

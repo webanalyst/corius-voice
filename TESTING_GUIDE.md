@@ -27,13 +27,19 @@ Test Suite 'All Tests' passed (59 tests, 0 failures)
 #### Solo ViewModels
 ```bash
 xcodebuild test -project CoriusVoice.xcodeproj -scheme CoriusVoice \
-  -testClass WorkspaceViewModelTests
+  -only-testing:CoriusVoiceTests/WorkspaceViewModelTests
 ```
 
 #### Solo Integración
 ```bash
 xcodebuild test -project CoriusVoice.xcodeproj -scheme CoriusVoice \
-  -testClass WorkspaceIntegrationTests
+  -only-testing:CoriusVoiceTests/WorkspaceIntegrationTests
+```
+
+#### Solo Hardening de storage (Sprint 1)
+```bash
+xcodebuild test -project CoriusVoice.xcodeproj -scheme CoriusVoice \
+  -only-testing:CoriusVoiceTests/WorkspaceStorageHardeningTests
 ```
 
 ### 3. Con Code Coverage
@@ -181,7 +187,7 @@ xcodebuild test -project CoriusVoice.xcodeproj -scheme CoriusVoice \
    Cuenta total de tarjetas
 ```
 
-### Integration Tests (12 tests)
+### Integration Tests (14 tests)
 
 ```
 ✅ testCreateEditSaveWorkflow
@@ -216,7 +222,45 @@ xcodebuild test -project CoriusVoice.xcodeproj -scheme CoriusVoice \
 
 ✅ testFilteringPerformanceWith1000Items
    Baseline: filtering en 1000 items
+
+✅ testBurstUpdatesPersistLatestState
+   Burst writes y verificación de persistencia final
+
+✅ testFlushIfPendingIsSafeWithoutWrites
+   Flush sin cambios pendientes no rompe ni degrada estado
 ```
+
+---
+
+## 📉 Baseline Técnico Sprint 1
+
+Comandos recomendados para baseline reproducible:
+
+```bash
+# Compilación del proyecto
+xcodebuild build -project CoriusVoice.xcodeproj -scheme CoriusVoice
+
+# Hardening de guardado
+xcodebuild test -project CoriusVoice.xcodeproj -scheme CoriusVoice \
+  -only-testing:CoriusVoiceTests/WorkspaceStorageHardeningTests
+
+# Flujo crítico representativo
+xcodebuild test -project CoriusVoice.xcodeproj -scheme CoriusVoice \
+  -only-testing:CoriusVoiceTests/WorkspaceIntegrationTests/testCreateEditSaveWorkflow
+
+# Baseline de métricas core (p95 save/search + voice error rate)
+xcodebuild test -project CoriusVoice.xcodeproj -scheme CoriusVoice \
+  -only-testing:CoriusVoiceTests/WorkspaceBaselineMetricsTests
+
+# Regresion Sprint 2 (consistencia DB views + linked DB)
+xcodebuild test -project CoriusVoice.xcodeproj -scheme CoriusVoice \
+  -only-testing:CoriusVoiceTests/DatabaseViewQueryEngineTests
+xcodebuild test -project CoriusVoice.xcodeproj -scheme CoriusVoice \
+  -only-testing:CoriusVoiceTests/WorkspaceRegressionCoverageTests
+```
+
+Resultados iniciales versionados:
+- `SPRINT_1_BASELINE_2026-02-06.md`
 
 ---
 

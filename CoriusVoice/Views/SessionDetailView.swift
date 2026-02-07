@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 // MARK: - Session Detail Tab
 
@@ -16,6 +17,29 @@ enum SessionDetailTab: String, CaseIterable {
     }
 }
 
+struct SourceTranscriptionProgress: Identifiable {
+    enum ProgressState {
+        case pending
+        case inProgress
+        case completed
+        case failed
+    }
+
+    let source: TranscriptSource
+    let fileName: String
+    let fileSize: Int64
+    var progressInfo: TranscriptionProgressInfo?
+    var whisperProgress: WhisperProgressInfo?
+    var state: ProgressState
+    var resultSegments: Int
+    var resultSpeakers: Int
+    var errorMessage: String?
+
+    var id: String {
+        "\(source.rawValue)_\(fileName)"
+    }
+}
+
 // MARK: - Transcription Progress Modal
 
 struct TranscriptionProgressModal: View {
@@ -29,6 +53,7 @@ struct TranscriptionProgressModal: View {
     let isLocal: Bool
     let whisperProgress: WhisperProgressInfo?
     let isDiarizationEnabled: Bool
+    let sourceProgresses: [SourceTranscriptionProgress]
 
     private var phase: TranscriptionProgressInfo.TranscriptionPhase {
         progressInfo?.phase ?? .preparing
@@ -38,7 +63,7 @@ struct TranscriptionProgressModal: View {
         progressInfo?.uploadProgress ?? 0
     }
 
-    private var localPhaseInfo: LocalPhaseInfo {
+    private func localPhaseInfo(for whisperProgress: WhisperProgressInfo?) -> LocalPhaseInfo {
         let phase = whisperProgress?.phase
         let modelName = whisperProgress?.modelName?.trimmingCharacters(in: .whitespacesAndNewlines)
         let globalProgress = whisperProgress?.progress ?? 0
@@ -153,6 +178,24 @@ struct TranscriptionProgressModal: View {
         )
     }
 
+    private var orderedSourceProgresses: [SourceTranscriptionProgress] {
+        sourceProgresses.sorted { lhs, rhs in
+            sourceSortKey(lhs.source) < sourceSortKey(rhs.source)
+        }
+    }
+
+    private var showsDualColumns: Bool {
+        Set(sourceProgresses.map(\.source.rawValue)).count >= 2
+    }
+
+    private var modalWidth: CGFloat {
+        guard showsDualColumns else { return 420 }
+        let columns = max(2, min(orderedSourceProgresses.count, 3))
+        let desiredWidth = CGFloat(columns) * 390
+        let availableWidth = max(420, (NSScreen.main?.visibleFrame.width ?? 1400) - 120)
+        return min(desiredWidth, availableWidth)
+    }
+
     private struct LocalPhaseInfo {
         let phase: LocalPhase
         let globalProgress: Double
@@ -188,140 +231,51 @@ struct TranscriptionProgressModal: View {
 
             Divider()
 
-            // File info
-            if let info = progressInfo {
-                HStack {
-                    Image(systemName: "doc.fill")
-                        .foregroundColor(.secondary)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(info.fileName)
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                            .lineLimit(1)
-                        Text(info.fileSizeFormatted)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                    Spacer()
-                    if totalFiles > 1 {
-                        Text("Part \(currentFile)/\(totalFiles)")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(Color.secondary.opacity(0.2))
-                            .cornerRadius(4)
-                    }
-                }
-                .padding()
-                .background(Color(NSColor.controlBackgroundColor))
-                .cornerRadius(8)
-            }
-
-            // Progress steps
-            VStack(spacing: 12) {
-                if isLocal {
-                    let localPhase = localPhaseInfo.phase
-                    ProgressStepRow(
-                        icon: "cpu",
-                        title: localPhaseInfo.preparingTitle,
-                        isActive: localPhase == .preparing,
-                        isCompleted: localPhase > .preparing,
-                        progress: nil
-                    )
-
-                    ProgressStepRow(
-                        icon: "waveform",
-                        title: localPhaseInfo.decodingTitle,
-                        isActive: localPhase == .decoding,
-                        isCompleted: localPhase > .decoding,
-                        progress: localPhaseInfo.decodingProgress
-                    )
-
-                    ProgressStepRow(
-                        icon: "waveform",
-                        title: localPhaseInfo.transcribingTitle,
-                        isActive: localPhase == .transcribing,
-                        isCompleted: localPhase > .transcribing,
-                        progress: localPhaseInfo.transcribingProgress
-                    )
-
-                    if isDiarizationEnabled {
-                        ProgressStepRow(
-                            icon: "person.2.fill",
-                            title: localPhaseInfo.diarizingTitle,
-                            isActive: localPhase == .diarizing,
-                            isCompleted: localPhase > .diarizing,
-                            progress: localPhaseInfo.diarizingProgress
-                        )
-                    }
-
-                    ProgressStepRow(
-                        icon: "text.magnifyingglass",
-                        title: "Parsing results",
-                        isActive: localPhase == .parsing,
-                        isCompleted: localPhase == .completed,
-                        progress: nil
-                    )
-                } else {
-                    ProgressStepRow(
-                        icon: "doc.fill",
-                        title: "Preparing",
-                        isActive: phase == .preparing,
-                        isCompleted: phase != .preparing,
-                        progress: nil
-                    )
-
-                    // Uploading section with chunk details
-                    VStack(spacing: 8) {
-                        ProgressStepRow(
-                            icon: "arrow.up.circle.fill",
-                            title: "Uploading to Deepgram",
-                            isActive: phase == .uploading,
-                            isCompleted: [.processing, .parsing, .completed].contains(phase),
-                            progress: phase == .uploading ? (progressInfo?.overallUploadProgress ?? uploadProgress) : nil
-                        )
-
-                        // Show individual chunk progress when uploading multiple chunks
-                        if let info = progressInfo, info.totalChunks > 1, phase == .uploading || phase == .processing {
-                            ChunkProgressGrid(
-                                chunkProgresses: info.chunkProgresses,
-                                totalChunks: info.totalChunks,
-                                completedChunks: info.completedChunks
-                            )
-                            .padding(.leading, 40)
+            if showsDualColumns {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(alignment: .top, spacing: 12) {
+                        ForEach(orderedSourceProgresses) { sourceProgress in
+                            sourceProgressColumn(sourceProgress)
+                                .frame(width: 370, alignment: .topLeading)
                         }
                     }
-
-                    ProgressStepRow(
-                        icon: "waveform",
-                        title: "Processing with Nova-3",
-                        isActive: phase == .processing && !(whisperProgress?.modelName?.localizedCaseInsensitiveContains("match") == true),
-                        isCompleted: [.parsing, .completed].contains(phase) || (whisperProgress?.modelName?.localizedCaseInsensitiveContains("match") == true),
-                        progress: nil
-                    )
-
-                    ProgressStepRow(
-                        icon: "text.magnifyingglass",
-                        title: "Parsing results",
-                        isActive: phase == .parsing && !(whisperProgress?.modelName?.localizedCaseInsensitiveContains("match") == true),
-                        isCompleted: phase == .completed || (whisperProgress?.modelName?.localizedCaseInsensitiveContains("match") == true),
-                        progress: nil
-                    )
-                    
-                    // Show speaker matching step when diarization is enabled
-                    if isDiarizationEnabled {
-                        let isMatchingActive = whisperProgress?.modelName?.localizedCaseInsensitiveContains("match") == true ||
-                                               whisperProgress?.modelName?.localizedCaseInsensitiveContains("extract") == true
-                        ProgressStepRow(
-                            icon: "person.2.fill",
-                            title: isMatchingActive ? (whisperProgress?.modelName ?? "Matching speakers...") : "Matching speakers",
-                            isActive: isMatchingActive && phase != .completed,
-                            isCompleted: phase == .completed,
-                            progress: isMatchingActive ? whisperProgress?.progress : nil
-                        )
-                    }
                 }
+            } else {
+                // File info
+                if let info = progressInfo {
+                    HStack {
+                        Image(systemName: "doc.fill")
+                            .foregroundColor(.secondary)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(info.fileName)
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .lineLimit(1)
+                            Text(info.fileSizeFormatted)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        Spacer()
+                        if totalFiles > 1 {
+                            Text("Part \(currentFile)/\(totalFiles)")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Color.secondary.opacity(0.2))
+                                .cornerRadius(4)
+                        }
+                    }
+                    .padding()
+                    .background(Color(NSColor.controlBackgroundColor))
+                    .cornerRadius(8)
+                }
+
+                progressSteps(
+                    progressInfo: progressInfo,
+                    whisperProgress: whisperProgress,
+                    isPending: false
+                )
             }
 
             // Error message with details
@@ -402,9 +356,252 @@ struct TranscriptionProgressModal: View {
             }
         }
         .padding(20)
-        .frame(width: 420)
+        .frame(width: modalWidth)
         .frame(minHeight: 450, maxHeight: 650)
-        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    @ViewBuilder
+    private func progressSteps(
+        progressInfo: TranscriptionProgressInfo?,
+        whisperProgress: WhisperProgressInfo?,
+        isPending: Bool
+    ) -> some View {
+        VStack(spacing: 12) {
+            if isPending {
+                if isLocal {
+                    ProgressStepRow(icon: "cpu", title: "Preparing", isActive: false, isCompleted: false, progress: nil)
+                    ProgressStepRow(icon: "waveform", title: "Decoding audio", isActive: false, isCompleted: false, progress: nil)
+                    ProgressStepRow(icon: "waveform", title: "Transcribing locally", isActive: false, isCompleted: false, progress: nil)
+                    if isDiarizationEnabled {
+                        ProgressStepRow(icon: "person.2.fill", title: "Diarizing speakers", isActive: false, isCompleted: false, progress: nil)
+                    }
+                    ProgressStepRow(icon: "text.magnifyingglass", title: "Parsing results", isActive: false, isCompleted: false, progress: nil)
+                } else {
+                    ProgressStepRow(icon: "doc.fill", title: "Preparing", isActive: false, isCompleted: false, progress: nil)
+                    ProgressStepRow(icon: "arrow.up.circle.fill", title: "Uploading to Deepgram", isActive: false, isCompleted: false, progress: nil)
+                    ProgressStepRow(icon: "waveform", title: "Processing with Nova-3", isActive: false, isCompleted: false, progress: nil)
+                    ProgressStepRow(icon: "text.magnifyingglass", title: "Parsing results", isActive: false, isCompleted: false, progress: nil)
+                    if isDiarizationEnabled {
+                        ProgressStepRow(icon: "person.2.fill", title: "Matching speakers", isActive: false, isCompleted: false, progress: nil)
+                    }
+                }
+            } else if isLocal {
+                let localPhaseInfo = localPhaseInfo(for: whisperProgress)
+                let localPhase = localPhaseInfo.phase
+                ProgressStepRow(
+                    icon: "cpu",
+                    title: localPhaseInfo.preparingTitle,
+                    isActive: localPhase == .preparing,
+                    isCompleted: localPhase > .preparing,
+                    progress: nil
+                )
+
+                ProgressStepRow(
+                    icon: "waveform",
+                    title: localPhaseInfo.decodingTitle,
+                    isActive: localPhase == .decoding,
+                    isCompleted: localPhase > .decoding,
+                    progress: localPhaseInfo.decodingProgress
+                )
+
+                ProgressStepRow(
+                    icon: "waveform",
+                    title: localPhaseInfo.transcribingTitle,
+                    isActive: localPhase == .transcribing,
+                    isCompleted: localPhase > .transcribing,
+                    progress: localPhaseInfo.transcribingProgress
+                )
+
+                if isDiarizationEnabled {
+                    ProgressStepRow(
+                        icon: "person.2.fill",
+                        title: localPhaseInfo.diarizingTitle,
+                        isActive: localPhase == .diarizing,
+                        isCompleted: localPhase > .diarizing,
+                        progress: localPhaseInfo.diarizingProgress
+                    )
+                }
+
+                ProgressStepRow(
+                    icon: "text.magnifyingglass",
+                    title: "Parsing results",
+                    isActive: localPhase == .parsing,
+                    isCompleted: localPhase == .completed,
+                    progress: nil
+                )
+            } else {
+                let phase = progressInfo?.phase ?? .preparing
+                let uploadProgress = progressInfo?.uploadProgress ?? 0
+                ProgressStepRow(
+                    icon: "doc.fill",
+                    title: "Preparing",
+                    isActive: phase == .preparing,
+                    isCompleted: phase != .preparing,
+                    progress: nil
+                )
+
+                // Uploading section with chunk details
+                VStack(spacing: 8) {
+                    ProgressStepRow(
+                        icon: "arrow.up.circle.fill",
+                        title: "Uploading to Deepgram",
+                        isActive: phase == .uploading,
+                        isCompleted: [.processing, .parsing, .completed].contains(phase),
+                        progress: phase == .uploading ? (progressInfo?.overallUploadProgress ?? uploadProgress) : nil
+                    )
+
+                    // Show individual chunk progress when uploading multiple chunks
+                    if let info = progressInfo, info.totalChunks > 1, phase == .uploading || phase == .processing {
+                        ChunkProgressGrid(
+                            chunkProgresses: info.chunkProgresses,
+                            totalChunks: info.totalChunks,
+                            completedChunks: info.completedChunks
+                        )
+                        .padding(.leading, 40)
+                    }
+                }
+
+                ProgressStepRow(
+                    icon: "waveform",
+                    title: "Processing with Nova-3",
+                    isActive: phase == .processing && !(whisperProgress?.modelName?.localizedCaseInsensitiveContains("match") == true),
+                    isCompleted: [.parsing, .completed].contains(phase) || (whisperProgress?.modelName?.localizedCaseInsensitiveContains("match") == true),
+                    progress: nil
+                )
+
+                ProgressStepRow(
+                    icon: "text.magnifyingglass",
+                    title: "Parsing results",
+                    isActive: phase == .parsing && !(whisperProgress?.modelName?.localizedCaseInsensitiveContains("match") == true),
+                    isCompleted: phase == .completed || (whisperProgress?.modelName?.localizedCaseInsensitiveContains("match") == true),
+                    progress: nil
+                )
+
+                // Show speaker matching step when diarization is enabled
+                if isDiarizationEnabled {
+                    let isMatchingActive = whisperProgress?.modelName?.localizedCaseInsensitiveContains("match") == true ||
+                        whisperProgress?.modelName?.localizedCaseInsensitiveContains("extract") == true
+                    ProgressStepRow(
+                        icon: "person.2.fill",
+                        title: isMatchingActive ? (whisperProgress?.modelName ?? "Matching speakers...") : "Matching speakers",
+                        isActive: isMatchingActive && phase != .completed,
+                        isCompleted: phase == .completed,
+                        progress: isMatchingActive ? whisperProgress?.progress : nil
+                    )
+                }
+            }
+        }
+    }
+
+    private func sourceSortKey(_ source: TranscriptSource) -> Int {
+        switch source {
+        case .microphone: return 0
+        case .system: return 1
+        case .unknown: return 2
+        }
+    }
+
+    private func sourceDisplayName(_ source: TranscriptSource) -> String {
+        switch source {
+        case .microphone: return "Microphone"
+        case .system: return "System Audio"
+        case .unknown: return "Audio"
+        }
+    }
+
+    private func sourceIcon(_ source: TranscriptSource) -> String {
+        switch source {
+        case .microphone: return "mic.fill"
+        case .system: return "speaker.wave.2.fill"
+        case .unknown: return "waveform"
+        }
+    }
+
+    private func sourceStateLabel(_ state: SourceTranscriptionProgress.ProgressState) -> String {
+        switch state {
+        case .pending: return "Pending"
+        case .inProgress: return "Running"
+        case .completed: return "Done"
+        case .failed: return "Failed"
+        }
+    }
+
+    private func sourceStateColor(_ state: SourceTranscriptionProgress.ProgressState) -> Color {
+        switch state {
+        case .pending: return .secondary
+        case .inProgress: return .accentColor
+        case .completed: return .green
+        case .failed: return .red
+        }
+    }
+
+    @ViewBuilder
+    private func sourceProgressColumn(_ sourceProgress: SourceTranscriptionProgress) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Label(sourceDisplayName(sourceProgress.source), systemImage: sourceIcon(sourceProgress.source))
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                Spacer()
+                Text(sourceStateLabel(sourceProgress.state))
+                    .font(.caption2)
+                    .fontWeight(.medium)
+                    .foregroundColor(sourceStateColor(sourceProgress.state))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(sourceStateColor(sourceProgress.state).opacity(0.15))
+                    .cornerRadius(4)
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(sourceProgress.fileName)
+                    .font(.caption)
+                    .lineLimit(1)
+                Text(formatFileSize(sourceProgress.fileSize))
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+
+            Divider()
+
+            progressSteps(
+                progressInfo: sourceProgress.progressInfo,
+                whisperProgress: sourceProgress.whisperProgress,
+                isPending: sourceProgress.state == .pending
+            )
+
+            if sourceProgress.state == .completed && sourceProgress.resultSegments > 0 {
+                HStack(spacing: 10) {
+                    Label("\(sourceProgress.resultSegments)", systemImage: "text.quote")
+                        .font(.caption)
+                    Label("\(sourceProgress.resultSpeakers)", systemImage: "person.2.fill")
+                        .font(.caption)
+                }
+                .foregroundColor(.green)
+                .padding(.top, 4)
+            }
+
+            if sourceProgress.state == .failed, let sourceError = sourceProgress.errorMessage {
+                Text(sourceError)
+                    .font(.caption2)
+                    .foregroundColor(.red)
+                    .lineLimit(3)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(Color(NSColor.controlBackgroundColor))
+        .cornerRadius(10)
+    }
+
+    private func formatFileSize(_ fileSize: Int64) -> String {
+        if fileSize < 1024 {
+            return "\(fileSize) B"
+        } else if fileSize < 1024 * 1024 {
+            return String(format: "%.1f KB", Double(fileSize) / 1024)
+        } else {
+            return String(format: "%.1f MB", Double(fileSize) / (1024 * 1024))
+        }
     }
 }
 
@@ -695,6 +892,7 @@ struct SessionDetailView: View {
     @State private var totalFilesCount = 1
     @State private var transcriptionResultSegments = 0
     @State private var transcriptionResultSpeakers = 0
+    @State private var sourceProgresses: [SourceTranscriptionProgress] = []
     @State private var showingLargeFileWarning = false
     @State private var largeFileInfo: (size: Int64, duration: TimeInterval)?
     @State private var selectedRegenerateLanguage: String? = nil  // nil = auto-detect
@@ -912,7 +1110,8 @@ struct SessionDetailView: View {
                 },
                 isLocal: settings.transcriptionProvider == .whisper,
                 whisperProgress: whisperProgress,
-                isDiarizationEnabled: settings.enableDiarization
+                isDiarizationEnabled: settings.enableDiarization,
+                sourceProgresses: sourceProgresses
             )
         }
     }
@@ -1001,6 +1200,7 @@ struct SessionDetailView: View {
         isRegeneratingTranscript = true
         regenerateError = nil
         progressInfo = nil
+        whisperProgress = nil
         transcriptionResultSegments = 0
         transcriptionResultSpeakers = 0
 
@@ -1019,19 +1219,31 @@ struct SessionDetailView: View {
 
         totalFilesCount = filesToTranscribe.count
         currentFileIndex = 1
+        sourceProgresses = makeSourceProgresses(from: filesToTranscribe)
 
         // Show modal
         showingProgressModal = true
 
         Task {
+            var activeSource: TranscriptSource?
             do {
                 var allSegments: [TranscriptSegment] = []
                 var allSpeakers: [Speaker] = []
                 var speakerIdOffset = 0
 
                 for (index, (audioURL, source)) in filesToTranscribe.enumerated() {
+                    activeSource = source
                     await MainActor.run {
                         currentFileIndex = index + 1
+                        whisperProgress = nil
+                        let sourceFileSize = sourceProgresses.first(where: { $0.source.rawValue == source.rawValue })?.fileSize ?? 0
+                        progressInfo = TranscriptionProgressInfo(
+                            phase: .preparing,
+                            uploadProgress: 0,
+                            fileName: audioURL.lastPathComponent,
+                            fileSize: sourceFileSize
+                        )
+                        markSourceStarted(source: source, fileName: audioURL.lastPathComponent, fileSize: sourceFileSize)
                     }
 
                     print("[SessionDetail] 📁 Transcribing file \(index + 1)/\(filesToTranscribe.count): \(audioURL.lastPathComponent) with \(settings.transcriptionProvider.displayName)")
@@ -1049,15 +1261,18 @@ struct SessionDetailView: View {
                                 audioURL: audioURL,
                                 language: transcriptionLanguage,
                                 onProgress: { info in
-                                    Task { @MainActor in
-                                        self.whisperProgress = info
+                                    DispatchQueue.main.async {
                                         let deepgramInfo = TranscriptionProgressInfo(
                                             phase: info.phase == .completed ? .completed : (info.phase == .processing ? .processing : .preparing),
                                             uploadProgress: info.progress,
                                             fileName: audioURL.lastPathComponent,
                                             fileSize: fileSize
                                         )
-                                        self.progressInfo = deepgramInfo
+                                        self.updateModalProgress(
+                                            progressInfo: deepgramInfo,
+                                            whisperProgress: info,
+                                            source: source,
+                                        )
                                     }
                                 }
                             )
@@ -1069,15 +1284,18 @@ struct SessionDetailView: View {
                                 audioURL: audioURL,
                                 language: transcriptionLanguage,
                                 onProgress: { info in
-                                    Task { @MainActor in
-                                        self.whisperProgress = info
+                                    DispatchQueue.main.async {
                                         let deepgramInfo = TranscriptionProgressInfo(
                                             phase: info.phase == .completed ? .completed : (info.phase == .processing ? .processing : .preparing),
                                             uploadProgress: info.progress,
                                             fileName: audioURL.lastPathComponent,
                                             fileSize: fileSize
                                         )
-                                        self.progressInfo = deepgramInfo
+                                        self.updateModalProgress(
+                                            progressInfo: deepgramInfo,
+                                            whisperProgress: info,
+                                            source: source,
+                                        )
                                     }
                                 }
                             )
@@ -1092,23 +1310,37 @@ struct SessionDetailView: View {
                             language: transcriptionLanguage,
                             enableDiarization: settings.enableDiarization,
                             onProgress: { info in
-                                self.progressInfo = info
+                                DispatchQueue.main.async {
+                                    self.updateModalProgress(
+                                        progressInfo: info,
+                                        whisperProgress: self.sourceWhisperProgress(for: source),
+                                        source: source,
+                                    )
+                                }
                             }
                         )
                         
                         // Match Deepgram speakers with local voice profiles using embeddings
                         if settings.enableDiarization && !deepgramSpeakers.isEmpty {
                             if #available(macOS 14.0, *) {
-                                Task { @MainActor in
-                                    self.whisperProgress = WhisperProgressInfo(phase: .processing, progress: 0.90, modelName: "Matching speakers...")
+                                DispatchQueue.main.async {
+                                    self.updateModalProgress(
+                                        progressInfo: self.progressInfoForSpeakerMatching(source: source),
+                                        whisperProgress: WhisperProgressInfo(phase: .processing, progress: 0.90, modelName: "Matching speakers..."),
+                                        source: source
+                                    )
                                 }
                                 let (matchedSegments, matchedSpeakers) = try await matchDeepgramSpeakersWithLocalEmbeddings(
                                     audioURL: audioURL,
                                     segments: deepgramSegments,
                                     speakers: deepgramSpeakers,
                                     onProgress: { status in
-                                        Task { @MainActor in
-                                            self.whisperProgress = WhisperProgressInfo(phase: .processing, progress: 0.95, modelName: status)
+                                        DispatchQueue.main.async {
+                                            self.updateModalProgress(
+                                                progressInfo: self.progressInfoForSpeakerMatching(source: source),
+                                                whisperProgress: WhisperProgressInfo(phase: .processing, progress: 0.95, modelName: status),
+                                                source: source
+                                            )
                                         }
                                     }
                                 )
@@ -1147,6 +1379,9 @@ struct SessionDetailView: View {
                     }
 
                     print("[SessionDetail] ✅ File \(index + 1): \(segments.count) segments, \(speakers.count) speakers")
+                    await MainActor.run {
+                        markSourceCompleted(source: source, segments: segments.count, speakers: speakers.count)
+                    }
                 }
 
                 // Sort all segments by timestamp
@@ -1178,10 +1413,15 @@ struct SessionDetailView: View {
             } catch {
                 await MainActor.run {
                     // Use detailed error description if available
+                    let errorDescription: String
                     if let deepgramError = error as? DeepgramError {
-                        regenerateError = deepgramError.detailedDescription
+                        errorDescription = deepgramError.detailedDescription
                     } else {
-                        regenerateError = error.localizedDescription
+                        errorDescription = error.localizedDescription
+                    }
+                    regenerateError = errorDescription
+                    if let failedSource = activeSource {
+                        markSourceFailed(source: failedSource, error: errorDescription)
                     }
                     print("[SessionDetail] ❌ Transcription failed: \(error)")
 
@@ -1223,6 +1463,7 @@ struct SessionDetailView: View {
         isRegeneratingTranscript = true
         regenerateError = nil
         progressInfo = nil
+        whisperProgress = nil
         transcriptionResultSegments = 0
         transcriptionResultSpeakers = 0
 
@@ -1232,6 +1473,18 @@ struct SessionDetailView: View {
             isRegeneratingTranscript = false
             return
         }
+
+        let chunkSource: TranscriptSource
+        if audioURL == session.micAudioFileURL {
+            chunkSource = .microphone
+        } else if audioURL == session.systemAudioFileURL {
+            chunkSource = .system
+        } else {
+            chunkSource = .unknown
+        }
+
+        sourceProgresses = makeSourceProgresses(from: [(audioURL, chunkSource)])
+        markSourceStarted(source: chunkSource, fileName: audioURL.lastPathComponent, fileSize: sourceProgresses.first?.fileSize ?? 0)
 
         totalFilesCount = 1  // Will show chunk progress instead
         currentFileIndex = 1
@@ -1252,19 +1505,22 @@ struct SessionDetailView: View {
 
                     if settings.enableDiarization {
                         // Hybrid mode: Whisper + FluidAudio
-                            let (whisperSegments, whisperSpeakers) = try await WhisperService.shared.transcribeFileWithDiarization(
+                        let (whisperSegments, whisperSpeakers) = try await WhisperService.shared.transcribeFileWithDiarization(
                             audioURL: audioURL,
                             language: transcriptionLanguage,
                             onProgress: { info in
-                                Task { @MainActor in
-                                    self.whisperProgress = info
+                                DispatchQueue.main.async {
                                     let deepgramInfo = TranscriptionProgressInfo(
                                         phase: info.phase == .completed ? .completed : (info.phase == .processing ? .processing : .preparing),
                                         uploadProgress: info.progress,
                                         fileName: audioURL.lastPathComponent,
                                         fileSize: fileSize
                                     )
-                                    self.progressInfo = deepgramInfo
+                                    self.updateModalProgress(
+                                        progressInfo: deepgramInfo,
+                                        whisperProgress: info,
+                                        source: chunkSource,
+                                    )
                                 }
                             }
                         )
@@ -1272,19 +1528,22 @@ struct SessionDetailView: View {
                         speakers = whisperSpeakers
                     } else {
                         // Whisper only (no diarization)
-                            let (whisperSegments, _) = try await WhisperService.shared.transcribeFile(
+                        let (whisperSegments, _) = try await WhisperService.shared.transcribeFile(
                             audioURL: audioURL,
                             language: transcriptionLanguage,
                             onProgress: { info in
-                                Task { @MainActor in
-                                    self.whisperProgress = info
+                                DispatchQueue.main.async {
                                     let deepgramInfo = TranscriptionProgressInfo(
                                         phase: info.phase == .completed ? .completed : (info.phase == .processing ? .processing : .preparing),
                                         uploadProgress: info.progress,
                                         fileName: audioURL.lastPathComponent,
                                         fileSize: fileSize
                                     )
-                                    self.progressInfo = deepgramInfo
+                                    self.updateModalProgress(
+                                        progressInfo: deepgramInfo,
+                                        whisperProgress: info,
+                                        source: chunkSource,
+                                    )
                                 }
                             }
                         )
@@ -1299,25 +1558,39 @@ struct SessionDetailView: View {
                         language: transcriptionLanguage,
                         enableDiarization: settings.enableDiarization,
                         onProgress: { info, chunkIndex, totalChunks in
-                            self.progressInfo = info
-                            self.currentFileIndex = chunkIndex
-                            self.totalFilesCount = totalChunks
+                            DispatchQueue.main.async {
+                                self.currentFileIndex = chunkIndex
+                                self.totalFilesCount = totalChunks
+                                self.updateModalProgress(
+                                    progressInfo: info,
+                                    whisperProgress: self.sourceWhisperProgress(for: chunkSource),
+                                    source: chunkSource,
+                                )
+                            }
                         }
                     )
                     
                     // Match Deepgram speakers with local voice profiles using embeddings
                     if settings.enableDiarization && !deepgramSpeakers.isEmpty {
                         if #available(macOS 14.0, *) {
-                            Task { @MainActor in
-                                self.whisperProgress = WhisperProgressInfo(phase: .processing, progress: 0.90, modelName: "Matching speakers...")
+                            DispatchQueue.main.async {
+                                self.updateModalProgress(
+                                    progressInfo: self.progressInfoForSpeakerMatching(source: chunkSource),
+                                    whisperProgress: WhisperProgressInfo(phase: .processing, progress: 0.90, modelName: "Matching speakers..."),
+                                    source: chunkSource
+                                )
                             }
                             let (matchedSegments, matchedSpeakers) = try await matchDeepgramSpeakersWithLocalEmbeddings(
                                 audioURL: audioURL,
                                 segments: deepgramSegments,
                                 speakers: deepgramSpeakers,
                                 onProgress: { status in
-                                    Task { @MainActor in
-                                        self.whisperProgress = WhisperProgressInfo(phase: .processing, progress: 0.95, modelName: status)
+                                    DispatchQueue.main.async {
+                                        self.updateModalProgress(
+                                            progressInfo: self.progressInfoForSpeakerMatching(source: chunkSource),
+                                            whisperProgress: WhisperProgressInfo(phase: .processing, progress: 0.95, modelName: status),
+                                            source: chunkSource
+                                        )
                                     }
                                 }
                             )
@@ -1349,6 +1622,7 @@ struct SessionDetailView: View {
                     }
 
                     print("[SessionDetail] ✅ Chunked transcription completed: \(segments.count) segments, \(speakers.count) speakers")
+                    markSourceCompleted(source: chunkSource, segments: segments.count, speakers: speakers.count)
 
                     // Close modal after a brief delay
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
@@ -1358,15 +1632,265 @@ struct SessionDetailView: View {
                 }
             } catch {
                 await MainActor.run {
+                    let errorDescription: String
                     if let deepgramError = error as? DeepgramError {
-                        regenerateError = deepgramError.detailedDescription
+                        errorDescription = deepgramError.detailedDescription
                     } else {
-                        regenerateError = error.localizedDescription
+                        errorDescription = error.localizedDescription
                     }
+                    regenerateError = errorDescription
+                    markSourceFailed(source: chunkSource, error: errorDescription)
                     print("[SessionDetail] ❌ Chunked transcription failed: \(error)")
                     isRegeneratingTranscript = false
                 }
             }
+        }
+    }
+
+    private func makeSourceProgresses(from filesToTranscribe: [(URL, TranscriptSource)]) -> [SourceTranscriptionProgress] {
+        filesToTranscribe.map { audioURL, source in
+            let fileSize = (try? FileManager.default.attributesOfItem(atPath: audioURL.path)[.size] as? Int64) ?? 0
+            return SourceTranscriptionProgress(
+                source: source,
+                fileName: audioURL.lastPathComponent,
+                fileSize: fileSize,
+                progressInfo: nil,
+                whisperProgress: nil,
+                state: .pending,
+                resultSegments: 0,
+                resultSpeakers: 0,
+                errorMessage: nil
+            )
+        }
+    }
+
+    private func markSourceStarted(source: TranscriptSource, fileName: String, fileSize: Int64) {
+        if let index = sourceProgresses.firstIndex(where: { $0.source.rawValue == source.rawValue }) {
+            sourceProgresses[index].state = .inProgress
+            sourceProgresses[index].errorMessage = nil
+            sourceProgresses[index].progressInfo = sourceProgresses[index].progressInfo ?? TranscriptionProgressInfo(
+                phase: .preparing,
+                uploadProgress: 0,
+                fileName: sourceProgresses[index].fileName,
+                fileSize: sourceProgresses[index].fileSize
+            )
+        } else {
+            sourceProgresses.append(
+                SourceTranscriptionProgress(
+                    source: source,
+                    fileName: fileName,
+                    fileSize: fileSize,
+                    progressInfo: TranscriptionProgressInfo(
+                        phase: .preparing,
+                        uploadProgress: 0,
+                        fileName: fileName,
+                        fileSize: fileSize
+                    ),
+                    whisperProgress: nil,
+                    state: .inProgress,
+                    resultSegments: 0,
+                    resultSpeakers: 0,
+                    errorMessage: nil
+                )
+            )
+        }
+    }
+
+    private func sourceProgressInfo(for source: TranscriptSource) -> TranscriptionProgressInfo? {
+        sourceProgresses.first(where: { $0.source.rawValue == source.rawValue })?.progressInfo
+    }
+
+    private func sourceWhisperProgress(for source: TranscriptSource) -> WhisperProgressInfo? {
+        sourceProgresses.first(where: { $0.source.rawValue == source.rawValue })?.whisperProgress
+    }
+
+    private func progressInfoForSpeakerMatching(source: TranscriptSource) -> TranscriptionProgressInfo? {
+        guard var info = sourceProgressInfo(for: source) else { return nil }
+
+        if phaseRank(info.phase) < phaseRank(.parsing) {
+            info.phase = .parsing
+        }
+        info.uploadProgress = 1.0
+
+        if info.totalChunks > 0 {
+            info.completedChunks = info.totalChunks
+            info.chunkProgresses = info.chunkProgresses.map { chunk in
+                var updatedChunk = chunk
+                updatedChunk.progress = 1.0
+                updatedChunk.phase = .completed
+                return updatedChunk
+            }
+        }
+
+        return info
+    }
+
+    private func updateSourceProgress(
+        source: TranscriptSource,
+        progressInfo: TranscriptionProgressInfo?,
+        whisperProgress: WhisperProgressInfo?
+    ) {
+        guard let index = sourceProgresses.firstIndex(where: { $0.source.rawValue == source.rawValue }) else { return }
+        let currentState = sourceProgresses[index].state
+
+        // Ignore late callbacks after terminal state to avoid reverting completed/failed columns to running.
+        if currentState == .completed || currentState == .failed {
+            return
+        }
+
+        var didChange = false
+        if sourceProgresses[index].state != .inProgress {
+            sourceProgresses[index].state = .inProgress
+            didChange = true
+        }
+        if shouldUpdateProgressInfo(existing: sourceProgresses[index].progressInfo, incoming: progressInfo),
+           let progressInfo {
+            sourceProgresses[index].progressInfo = progressInfo
+            didChange = true
+        }
+        if shouldUpdateWhisperProgress(existing: sourceProgresses[index].whisperProgress, incoming: whisperProgress),
+           let whisperProgress {
+            sourceProgresses[index].whisperProgress = whisperProgress
+            didChange = true
+        }
+
+        if !didChange {
+            return
+        }
+    }
+
+    private func shouldUpdateProgressInfo(
+        existing: TranscriptionProgressInfo?,
+        incoming: TranscriptionProgressInfo?
+    ) -> Bool {
+        guard let incoming else { return false }
+        guard let existing else { return true }
+
+        let existingRank = phaseRank(existing.phase)
+        let incomingRank = phaseRank(incoming.phase)
+        if incomingRank < existingRank {
+            return false
+        }
+
+        if existing.phase != incoming.phase { return true }
+        if existing.fileName != incoming.fileName { return true }
+        if existing.fileSize != incoming.fileSize { return true }
+        if abs(existing.uploadProgress - incoming.uploadProgress) >= 0.01 { return true }
+        if abs(existing.overallUploadProgress - incoming.overallUploadProgress) >= 0.01 { return true }
+        if existing.completedChunks != incoming.completedChunks { return true }
+        if existing.totalChunks != incoming.totalChunks { return true }
+
+        return false
+    }
+
+    private func shouldUpdateWhisperProgress(
+        existing: WhisperProgressInfo?,
+        incoming: WhisperProgressInfo?
+    ) -> Bool {
+        guard let incoming else { return false }
+        guard let existing else { return true }
+
+        let existingRank = whisperPhaseRank(existing.phase)
+        let incomingRank = whisperPhaseRank(incoming.phase)
+        if incomingRank < existingRank {
+            return false
+        }
+        if existing.phase == incoming.phase, incoming.progress + 0.01 < existing.progress {
+            return false
+        }
+
+        if existing.phase != incoming.phase { return true }
+        if existing.modelName != incoming.modelName { return true }
+        if abs(existing.progress - incoming.progress) >= 0.01 { return true }
+
+        return false
+    }
+
+    private func phaseRank(_ phase: TranscriptionProgressInfo.TranscriptionPhase) -> Int {
+        switch phase {
+        case .preparing: return 0
+        case .uploading: return 1
+        case .processing: return 2
+        case .parsing: return 3
+        case .completed: return 4
+        case .failed: return 5
+        }
+    }
+
+    private func whisperPhaseRank(_ phase: WhisperProgressInfo.WhisperPhase) -> Int {
+        switch phase {
+        case .loadingModel: return 0
+        case .downloadingModel: return 1
+        case .processing: return 2
+        case .completed: return 3
+        case .failed: return 4
+        }
+    }
+
+    private func updateModalProgress(
+        progressInfo: TranscriptionProgressInfo?,
+        whisperProgress: WhisperProgressInfo?,
+        source: TranscriptSource
+    ) {
+        if shouldUpdateProgressInfo(existing: self.progressInfo, incoming: progressInfo),
+           let progressInfo {
+            self.progressInfo = progressInfo
+        }
+        if shouldUpdateWhisperProgress(existing: self.whisperProgress, incoming: whisperProgress),
+           let whisperProgress {
+            self.whisperProgress = whisperProgress
+        }
+
+        updateSourceProgress(
+            source: source,
+            progressInfo: progressInfo,
+            whisperProgress: whisperProgress
+        )
+    }
+
+    private func markSourceCompleted(source: TranscriptSource, segments: Int, speakers: Int) {
+        guard let index = sourceProgresses.firstIndex(where: { $0.source.rawValue == source.rawValue }) else { return }
+        sourceProgresses[index].state = .completed
+        sourceProgresses[index].resultSegments = segments
+        sourceProgresses[index].resultSpeakers = speakers
+        sourceProgresses[index].errorMessage = nil
+        if var info = sourceProgresses[index].progressInfo {
+            info.phase = .completed
+            info.uploadProgress = 1.0
+            sourceProgresses[index].progressInfo = info
+        } else {
+            sourceProgresses[index].progressInfo = TranscriptionProgressInfo(
+                phase: .completed,
+                uploadProgress: 1.0,
+                fileName: sourceProgresses[index].fileName,
+                fileSize: sourceProgresses[index].fileSize
+            )
+        }
+        if var whisper = sourceProgresses[index].whisperProgress {
+            whisper.phase = .completed
+            whisper.progress = 1.0
+            sourceProgresses[index].whisperProgress = whisper
+        }
+    }
+
+    private func markSourceFailed(source: TranscriptSource, error: String) {
+        guard let index = sourceProgresses.firstIndex(where: { $0.source.rawValue == source.rawValue }) else { return }
+        sourceProgresses[index].state = .failed
+        sourceProgresses[index].errorMessage = error
+        if var info = sourceProgresses[index].progressInfo {
+            info.phase = .failed
+            sourceProgresses[index].progressInfo = info
+        } else {
+            sourceProgresses[index].progressInfo = TranscriptionProgressInfo(
+                phase: .failed,
+                uploadProgress: 0,
+                fileName: sourceProgresses[index].fileName,
+                fileSize: sourceProgresses[index].fileSize
+            )
+        }
+        if var whisper = sourceProgresses[index].whisperProgress {
+            whisper.phase = .failed
+            sourceProgresses[index].whisperProgress = whisper
         }
     }
 }

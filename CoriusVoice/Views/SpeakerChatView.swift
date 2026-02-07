@@ -291,6 +291,16 @@ struct ToolCallIndicator: View {
             return "Getting summary..."
         case "get_speaker_info":
             return "Loading speaker info..."
+        case "list_workspace_actions":
+            return "Loading action catalog..."
+        case "execute_workspace_action":
+            return "Executing workspace action..."
+        case "confirm_workspace_action":
+            return "Confirming action..."
+        case "rollback_workspace_action":
+            return "Rolling back action..."
+        case "get_workspace_action_audit":
+            return "Loading action audit..."
         default:
             return "Processing..."
         }

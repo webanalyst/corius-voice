@@ -258,13 +258,116 @@ struct ChatTool {
         ]
     )
 
+    static let listWorkspaceActions = ChatTool(
+        name: "list_workspace_actions",
+        description: "List safe agent actions available for workspace automation, including confirmation and rollback capabilities.",
+        parameters: [
+            "type": "object",
+            "properties": [:],
+            "required": []
+        ]
+    )
+
+    static let executeWorkspaceAction = ChatTool(
+        name: "execute_workspace_action",
+        description: "Execute a workspace action from the approved action catalog. Some actions may return a confirmation token before execution.",
+        parameters: [
+            "type": "object",
+            "properties": [
+                "action": [
+                    "type": "string",
+                    "enum": ["create_task", "move_task", "delete_item"],
+                    "description": "The action to execute"
+                ],
+                "title": [
+                    "type": "string",
+                    "description": "Task title for create_task"
+                ],
+                "database_id": [
+                    "type": "string",
+                    "description": "Optional database UUID for create_task"
+                ],
+                "task_id": [
+                    "type": "string",
+                    "description": "Optional task UUID for move_task"
+                ],
+                "task_query": [
+                    "type": "string",
+                    "description": "Task search text for move_task when task_id is not provided"
+                ],
+                "target_status": [
+                    "type": "string",
+                    "description": "Target status/column for move_task"
+                ],
+                "item_id": [
+                    "type": "string",
+                    "description": "Item UUID for delete_item"
+                ],
+                "item_query": [
+                    "type": "string",
+                    "description": "Fallback title search for delete_item when item_id is not provided"
+                ]
+            ],
+            "required": ["action"]
+        ]
+    )
+
+    static let confirmWorkspaceAction = ChatTool(
+        name: "confirm_workspace_action",
+        description: "Confirm or reject a previously pending workspace action using its confirmation token.",
+        parameters: [
+            "type": "object",
+            "properties": [
+                "confirmation_token": [
+                    "type": "string",
+                    "description": "Token returned by execute_workspace_action when confirmation is required"
+                ],
+                "accept": [
+                    "type": "boolean",
+                    "description": "Whether to accept (true) or reject (false) the pending action"
+                ]
+            ],
+            "required": ["confirmation_token"]
+        ]
+    )
+
+    static let rollbackWorkspaceAction = ChatTool(
+        name: "rollback_workspace_action",
+        description: "Rollback the most recent successful workspace action if rollback data is available.",
+        parameters: [
+            "type": "object",
+            "properties": [:],
+            "required": []
+        ]
+    )
+
+    static let getWorkspaceActionAudit = ChatTool(
+        name: "get_workspace_action_audit",
+        description: "Get recent workspace action audit entries for traceability.",
+        parameters: [
+            "type": "object",
+            "properties": [
+                "limit": [
+                    "type": "integer",
+                    "description": "Maximum number of audit entries to return (default: 10)"
+                ]
+            ],
+            "required": []
+        ]
+    )
+
     /// All available tools for speaker chat
     static var allTools: [[String: Any]] {
         [
             searchSessions.asDictionary,
             getTranscript.asDictionary,
             getSummary.asDictionary,
-            getSpeakerInfo.asDictionary
+            getSpeakerInfo.asDictionary,
+            listWorkspaceActions.asDictionary,
+            executeWorkspaceAction.asDictionary,
+            confirmWorkspaceAction.asDictionary,
+            rollbackWorkspaceAction.asDictionary,
+            getWorkspaceActionAudit.asDictionary
         ]
     }
 }
@@ -287,4 +390,24 @@ struct GetTranscriptArgs: Codable {
 
 struct GetSummaryArgs: Codable {
     var session_id: String
+}
+
+struct ExecuteWorkspaceActionArgs: Codable {
+    var action: String
+    var title: String?
+    var database_id: String?
+    var task_id: String?
+    var task_query: String?
+    var target_status: String?
+    var item_id: String?
+    var item_query: String?
+}
+
+struct ConfirmWorkspaceActionArgs: Codable {
+    var confirmation_token: String
+    var accept: Bool?
+}
+
+struct WorkspaceActionAuditArgs: Codable {
+    var limit: Int?
 }

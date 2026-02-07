@@ -9,6 +9,10 @@ La planificacion activa del producto esta en:
 Backlog operativo inmediato:
 
 - `SPRINT_1_BACKLOG_2026-02-05.md`
+- `SPRINT_2_BACKLOG_2026-02-06.md`
+- `SPRINT_3_BACKLOG_2026-02-06.md`
+- `SPRINT_4_BACKLOG_2026-02-06.md`
+- `SPRINT_5_BACKLOG_2026-02-06.md`
 
 ## Legacy roadmap (completado)
 

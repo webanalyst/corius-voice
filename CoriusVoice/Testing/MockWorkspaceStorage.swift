@@ -22,6 +22,7 @@ class MockWorkspaceStorage: ObservableObject, WorkspaceStorageProtocol {
     
     var callCount: [String: Int] = [:]
     var recordedCalls: [String: [Any]] = [:]
+    private var lastMetrics: FlushMetrics = .empty
     
     // MARK: - Computed Properties
     
@@ -137,6 +138,35 @@ class MockWorkspaceStorage: ObservableObject, WorkspaceStorageProtocol {
     func forceSave() async {
         recordCall("forceSave()", args: nil)
         // No-op para testing
+    }
+
+    func flush(reason: FlushReason) async {
+        recordCall("flush(reason:)", args: reason.rawValue)
+        lastMetrics = FlushMetrics(
+            reason: reason,
+            durationMs: 0.1,
+            databaseCount: databasesById.count,
+            itemCount: itemsById.count,
+            versionCount: 0,
+            retryCount: 0,
+            success: true,
+            errorDescription: nil,
+            timestamp: Date(),
+            p50DurationMs: 0.1,
+            p95DurationMs: 0.1
+        )
+    }
+
+    func flushIfPending() async {
+        recordCall("flushIfPending()", args: nil)
+    }
+
+    func lastFlushMetrics() -> FlushMetrics {
+        lastMetrics
+    }
+
+    func recordMetric(_ event: WorkspaceMetricEvent) {
+        recordCall("recordMetric(_:)", args: event)
     }
     
     // MARK: - Helpers

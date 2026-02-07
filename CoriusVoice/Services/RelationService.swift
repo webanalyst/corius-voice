@@ -855,3 +855,183 @@ struct FormulaEvaluator {
         }
     }
 }
+
+// MARK: - Database View Query Engine
+
+/// Shared query engine for database views and linked database embeds.
+/// Keeps filter/sort behavior consistent across the workspace UI.
+enum DatabaseViewQueryEngine {
+    static func apply(
+        filters: [ViewFilter],
+        sorts: [ViewSort],
+        to items: [WorkspaceItem],
+        database: Database,
+        storage: any WorkspaceStorageProtocol
+    ) -> [WorkspaceItem] {
+        let filtered = applyFilters(filters, to: items, database: database, storage: storage)
+        return applySorts(sorts, to: filtered, database: database, storage: storage)
+    }
+
+    static func applyFilters(
+        _ filters: [ViewFilter],
+        to items: [WorkspaceItem],
+        database: Database,
+        storage: any WorkspaceStorageProtocol
+    ) -> [WorkspaceItem] {
+        guard !filters.isEmpty else { return items }
+        return items.filter { item in
+            filters.allSatisfy { filter in
+                matchesFilter(filter, item: item, database: database, storage: storage)
+            }
+        }
+    }
+
+    static func applySorts(
+        _ sorts: [ViewSort],
+        to items: [WorkspaceItem],
+        database: Database,
+        storage: any WorkspaceStorageProtocol
+    ) -> [WorkspaceItem] {
+        guard !sorts.isEmpty else { return items }
+        return items.sorted { lhs, rhs in
+            for sort in sorts {
+                let leftValue = resolvedPropertyValue(
+                    for: lhs,
+                    propertyName: sort.propertyName,
+                    propertyId: sort.propertyId,
+                    key: storageKey(for: sort, in: database),
+                    database: database,
+                    storage: storage
+                )
+                let rightValue = resolvedPropertyValue(
+                    for: rhs,
+                    propertyName: sort.propertyName,
+                    propertyId: sort.propertyId,
+                    key: storageKey(for: sort, in: database),
+                    database: database,
+                    storage: storage
+                )
+                if leftValue.displayValue == rightValue.displayValue {
+                    continue
+                }
+                let order = compareValue(leftValue, to: rightValue)
+                return sort.ascending ? order == .orderedAscending : order == .orderedDescending
+            }
+            return lhs.updatedAt > rhs.updatedAt
+        }
+    }
+
+    private static func matchesFilter(
+        _ filter: ViewFilter,
+        item: WorkspaceItem,
+        database: Database,
+        storage: any WorkspaceStorageProtocol
+    ) -> Bool {
+        let key = storageKey(for: filter, in: database)
+        let value: PropertyValue
+        if filter.propertyName.lowercased() == "title" {
+            value = .text(item.title)
+        } else {
+            value = resolvedPropertyValue(
+                for: item,
+                propertyName: filter.propertyName,
+                propertyId: filter.propertyId,
+                key: key,
+                database: database,
+                storage: storage
+            )
+        }
+
+        switch filter.operation {
+        case .equals:
+            return compareValue(value, to: filter.value) == .orderedSame
+        case .notEquals:
+            return compareValue(value, to: filter.value) != .orderedSame
+        case .contains:
+            return value.displayValue.localizedCaseInsensitiveContains(filter.value.displayValue)
+        case .notContains:
+            return !value.displayValue.localizedCaseInsensitiveContains(filter.value.displayValue)
+        case .isEmpty:
+            return value.isEmpty
+        case .isNotEmpty:
+            return !value.isEmpty
+        case .greaterThan:
+            return compareValue(value, to: filter.value) == .orderedDescending
+        case .lessThan:
+            return compareValue(value, to: filter.value) == .orderedAscending
+        }
+    }
+
+    private static func resolvedPropertyValue(
+        for item: WorkspaceItem,
+        propertyName: String,
+        propertyId: UUID?,
+        key: String,
+        database: Database,
+        storage: any WorkspaceStorageProtocol
+    ) -> PropertyValue {
+        if propertyName.lowercased() == "title" {
+            return .text(item.title)
+        }
+
+        let definition = propertyDefinition(for: propertyName, propertyId: propertyId, database: database)
+        if let definition,
+           definition.type == .rollup || definition.type == .formula
+            || definition.type == .createdTime || definition.type == .lastEdited || definition.type == .createdBy {
+            guard let optimizedStorage = storage as? WorkspaceStorageServiceOptimized else {
+                return item.properties[key] ?? item.properties[PropertyDefinition.legacyKey(for: propertyName)] ?? .empty
+            }
+            return PropertyValueResolver.value(
+                for: item,
+                definition: definition,
+                database: database,
+                storage: optimizedStorage
+            )
+        }
+
+        let legacyKey = PropertyDefinition.legacyKey(for: propertyName)
+        return item.properties[key] ?? item.properties[legacyKey] ?? .empty
+    }
+
+    private static func propertyDefinition(
+        for propertyName: String,
+        propertyId: UUID?,
+        database: Database
+    ) -> PropertyDefinition? {
+        if let id = propertyId, let definition = database.properties.first(where: { $0.id == id }) {
+            return definition
+        }
+        return database.properties.first(where: { $0.name == propertyName })
+    }
+
+    private static func compareValue(_ lhs: PropertyValue, to rhs: PropertyValue) -> ComparisonResult {
+        switch (lhs, rhs) {
+        case (.number(let left), .number(let right)):
+            return left == right ? .orderedSame : (left < right ? .orderedAscending : .orderedDescending)
+        case (.date(let left), .date(let right)):
+            return left.compare(right)
+        default:
+            return lhs.displayValue.localizedStandardCompare(rhs.displayValue)
+        }
+    }
+
+    private static func storageKey(for filter: ViewFilter, in database: Database) -> String {
+        if let id = filter.propertyId {
+            return id.uuidString
+        }
+        if let definition = database.properties.first(where: { $0.name == filter.propertyName }) {
+            return definition.storageKey
+        }
+        return PropertyDefinition.legacyKey(for: filter.propertyName)
+    }
+
+    private static func storageKey(for sort: ViewSort, in database: Database) -> String {
+        if let id = sort.propertyId {
+            return id.uuidString
+        }
+        if let definition = database.properties.first(where: { $0.name == sort.propertyName }) {
+            return definition.storageKey
+        }
+        return PropertyDefinition.legacyKey(for: sort.propertyName)
+    }
+}

@@ -398,11 +398,11 @@ final class KanbanBoardViewModelTests: XCTestCase {
     }
     
     func testMoveCard() {
-        sut.addColumn(named: "Todo")
-        sut.addColumn(named: "Done")
-        
-        let todoColumnID = sut.columns[0].id
-        let doneColumnID = sut.columns[1].id
+        let todoColumnID = sut.columns.first { $0.name.caseInsensitiveCompare("Todo") == .orderedSame }?.id
+        let doneColumnID = sut.columns.first { $0.name.caseInsensitiveCompare("Done") == .orderedSame }?.id
+        XCTAssertNotNil(todoColumnID)
+        XCTAssertNotNil(doneColumnID)
+        guard let todoColumnID, let doneColumnID else { return }
         
         sut.addCard(titled: "Task", to: todoColumnID)
         let cardID = sut.cards[0].id

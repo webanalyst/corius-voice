@@ -1103,6 +1103,11 @@ struct ViewOptionsSheet: View {
 
                 if let view = selectedView,
                    let index = database.views.firstIndex(where: { $0.id == view.id }) {
+                    Section("Summary") {
+                        LabeledContent("View type", value: view.type.displayName)
+                        LabeledContent("Filters", value: "\(view.filters.count)")
+                        LabeledContent("Sorts", value: "\(view.sorts.count)")
+                    }
                     FilterEditorView(view: $database.views[index], database: database)
                     SortEditorView(view: $database.views[index], database: database)
                     if view.type == .calendar {
@@ -1138,23 +1143,29 @@ struct FilterEditorView: View {
     let database: Database
 
     var body: some View {
-        Section("Filters") {
+        Section {
             if view.filters.isEmpty {
-                Text("No filters applied")
+                Label("No filters yet", systemImage: "line.3.horizontal.decrease.circle")
+                    .font(.subheadline)
                     .foregroundColor(.secondary)
+            } else {
+                ForEach(view.filters) { filter in
+                    FilterRow(
+                        filter: binding(for: filter),
+                        properties: database.properties,
+                        onDelete: {
+                            view.filters.removeAll { $0.id == filter.id }
+                        }
+                    )
+                }
+
+                Button("Clear filters", role: .destructive) {
+                    view.filters.removeAll()
+                }
+                .buttonStyle(.borderless)
             }
 
-            ForEach(view.filters) { filter in
-                FilterRow(
-                    filter: binding(for: filter),
-                    properties: database.properties,
-                    onDelete: {
-                        view.filters.removeAll { $0.id == filter.id }
-                    }
-                )
-            }
-
-            Button("Add filter") {
+            Button {
                 if let property = database.properties.first {
                     view.filters.append(
                         ViewFilter(
@@ -1173,7 +1184,15 @@ struct FilterEditorView: View {
                         )
                     )
                 }
+            } label: {
+                Label("Add filter", systemImage: "plus")
             }
+        } header: {
+            Text("Filters")
+        } footer: {
+            Text("An item must match all filters to appear in this view.")
+                .font(.caption)
+                .foregroundColor(.secondary)
         }
     }
 
@@ -1305,6 +1324,7 @@ struct FilterRow: View {
             return .text("")
         }
     }
+
 }
 
 struct FilterValueField: View {
@@ -1360,29 +1380,43 @@ struct SortEditorView: View {
     let database: Database
 
     var body: some View {
-        Section("Sorts") {
+        Section {
             if view.sorts.isEmpty {
-                Text("No sorts applied")
+                Label("No sorts yet", systemImage: "arrow.up.arrow.down.circle")
+                    .font(.subheadline)
                     .foregroundColor(.secondary)
+            } else {
+                ForEach(view.sorts) { sort in
+                    SortRow(
+                        sort: binding(for: sort),
+                        properties: database.properties,
+                        onDelete: {
+                            view.sorts.removeAll { $0.id == sort.id }
+                        }
+                    )
+                }
+
+                Button("Clear sorts", role: .destructive) {
+                    view.sorts.removeAll()
+                }
+                .buttonStyle(.borderless)
             }
 
-            ForEach(view.sorts) { sort in
-                SortRow(
-                    sort: binding(for: sort),
-                    properties: database.properties,
-                    onDelete: {
-                        view.sorts.removeAll { $0.id == sort.id }
-                    }
-                )
-            }
-
-            Button("Add sort") {
+            Button {
                 if let property = database.properties.first {
                     view.sorts.append(ViewSort(propertyName: property.name, propertyId: property.id, ascending: true))
                 } else {
                     view.sorts.append(ViewSort(propertyName: "Title", ascending: true))
                 }
+            } label: {
+                Label("Add sort", systemImage: "plus")
             }
+        } header: {
+            Text("Sorts")
+        } footer: {
+            Text("Sorts are applied from top to bottom.")
+                .font(.caption)
+                .foregroundColor(.secondary)
         }
     }
 
@@ -1619,121 +1653,21 @@ struct RenameDatabaseViewSheet: View {
 }
 
 private func applyFilters(_ filters: [ViewFilter], to items: [WorkspaceItem], database: Database) -> [WorkspaceItem] {
-    guard !filters.isEmpty else { return items }
-    return items.filter { item in
-        filters.allSatisfy { filter in
-            matchesFilter(filter, item: item, database: database)
-        }
-    }
-}
-
-private func matchesFilter(_ filter: ViewFilter, item: WorkspaceItem, database: Database) -> Bool {
-    let key = storageKey(for: filter, in: database)
-    let value: PropertyValue
-    if filter.propertyName.lowercased() == "title" {
-        value = .text(item.title)
-    } else {
-        value = resolvedPropertyValue(for: item, propertyName: filter.propertyName, propertyId: filter.propertyId, key: key, database: database)
-    }
-
-    switch filter.operation {
-    case .equals:
-        return compareValue(value, to: filter.value) == .orderedSame
-    case .notEquals:
-        return compareValue(value, to: filter.value) != .orderedSame
-    case .contains:
-        return value.displayValue.localizedCaseInsensitiveContains(filter.value.displayValue)
-    case .notContains:
-        return !value.displayValue.localizedCaseInsensitiveContains(filter.value.displayValue)
-    case .isEmpty:
-        return value.isEmpty
-    case .isNotEmpty:
-        return !value.isEmpty
-    case .greaterThan:
-        return compareValue(value, to: filter.value) == .orderedDescending
-    case .lessThan:
-        return compareValue(value, to: filter.value) == .orderedAscending
-    }
+    DatabaseViewQueryEngine.applyFilters(
+        filters,
+        to: items,
+        database: database,
+        storage: WorkspaceStorageServiceOptimized.shared
+    )
 }
 
 private func applySorts(_ sorts: [ViewSort], to items: [WorkspaceItem], database: Database) -> [WorkspaceItem] {
-    guard !sorts.isEmpty else { return items }
-    return items.sorted { lhs, rhs in
-        for sort in sorts {
-            let key = storageKey(for: sort, in: database)
-            let leftValue = resolvedPropertyValue(for: lhs, propertyName: sort.propertyName, propertyId: sort.propertyId, key: key, database: database)
-            let rightValue = resolvedPropertyValue(for: rhs, propertyName: sort.propertyName, propertyId: sort.propertyId, key: key, database: database)
-            if leftValue.displayValue == rightValue.displayValue { continue }
-            let order = compareValue(leftValue, to: rightValue)
-            return sort.ascending ? order == .orderedAscending : order == .orderedDescending
-        }
-        return lhs.updatedAt > rhs.updatedAt
-    }
-}
-
-private func resolvedPropertyValue(
-    for item: WorkspaceItem,
-    propertyName: String,
-    propertyId: UUID?,
-    key: String,
-    database: Database
-) -> PropertyValue {
-    if propertyName.lowercased() == "title" {
-        return .text(item.title)
-    }
-    let definition = propertyDefinition(for: propertyName, propertyId: propertyId, database: database)
-    if let definition,
-       definition.type == .rollup || definition.type == .formula
-        || definition.type == .createdTime || definition.type == .lastEdited || definition.type == .createdBy {
-        return PropertyValueResolver.value(
-            for: item,
-            definition: definition,
-            database: database,
-            storage: WorkspaceStorageServiceOptimized.shared
-        )
-    }
-    let legacyKey = PropertyDefinition.legacyKey(for: propertyName)
-    return item.properties[key] ?? item.properties[legacyKey] ?? .empty
-}
-
-private func propertyDefinition(for propertyName: String, propertyId: UUID?, database: Database) -> PropertyDefinition? {
-    if let id = propertyId, let def = database.properties.first(where: { $0.id == id }) {
-        return def
-    }
-    return database.properties.first(where: { $0.name == propertyName })
-}
-
-private func compareValue(_ lhs: PropertyValue, to rhs: PropertyValue) -> ComparisonResult {
-    switch (lhs, rhs) {
-    case (.number(let left), .number(let right)):
-        return left == right ? .orderedSame : (left < right ? .orderedAscending : .orderedDescending)
-    case (.date(let left), .date(let right)):
-        return left.compare(right)
-    default:
-        let leftText = lhs.displayValue
-        let rightText = rhs.displayValue
-        return leftText.localizedStandardCompare(rightText)
-    }
-}
-
-private func storageKey(for filter: ViewFilter, in database: Database) -> String {
-    if let id = filter.propertyId {
-        return id.uuidString
-    }
-    if let definition = database.properties.first(where: { $0.name == filter.propertyName }) {
-        return definition.storageKey
-    }
-    return PropertyDefinition.legacyKey(for: filter.propertyName)
-}
-
-private func storageKey(for sort: ViewSort, in database: Database) -> String {
-    if let id = sort.propertyId {
-        return id.uuidString
-    }
-    if let definition = database.properties.first(where: { $0.name == sort.propertyName }) {
-        return definition.storageKey
-    }
-    return PropertyDefinition.legacyKey(for: sort.propertyName)
+    DatabaseViewQueryEngine.applySorts(
+        sorts,
+        to: items,
+        database: database,
+        storage: WorkspaceStorageServiceOptimized.shared
+    )
 }
 
 struct DatabasePropertiesSheet: View {

@@ -37,17 +37,30 @@ class WorkspaceStorageServiceOptimized: ObservableObject {
     
     private var saveTask: Task<Void, Never>?
     private let saveQueue = DispatchQueue(label: "workspace.storage.save", qos: .utility)
+    private var hasPendingChanges = false
+    private var lastFlush = FlushMetrics.empty
+    private var saveDurationsMs: [Double] = []
+    private var metricEvents: [WorkspaceMetricEvent] = []
+    private let maxMetricSamples = 200
+    private let maxSaveRetries = 2
     
     // MARK: - File URLs
     
     private let fileManager = FileManager.default
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
+    private let baseDirectoryURL: URL?
+    private let isSwiftDataSyncEnabled: Bool
     
     private var workspaceDirectory: URL {
-        let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let appDir = appSupport.appendingPathComponent("CoriusVoice", isDirectory: true)
-        let workspaceDir = appDir.appendingPathComponent("Workspace", isDirectory: true)
+        let workspaceDir: URL
+        if let baseDirectoryURL {
+            workspaceDir = baseDirectoryURL
+        } else {
+            let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+            let appDir = appSupport.appendingPathComponent("CoriusVoice", isDirectory: true)
+            workspaceDir = appDir.appendingPathComponent("Workspace", isDirectory: true)
+        }
         
         if !fileManager.fileExists(atPath: workspaceDir.path) {
             try? fileManager.createDirectory(at: workspaceDir, withIntermediateDirectories: true)
@@ -59,10 +72,13 @@ class WorkspaceStorageServiceOptimized: ObservableObject {
     private var databasesURL: URL { workspaceDirectory.appendingPathComponent("databases.json") }
     private var itemsURL: URL { workspaceDirectory.appendingPathComponent("items.json") }
     private var versionsURL: URL { workspaceDirectory.appendingPathComponent("versions.json") }
+    private var recoveryMarkerURL: URL { workspaceDirectory.appendingPathComponent(".save_in_progress") }
     
     // MARK: - Initialization
     
-    init() {
+    init(baseDirectoryURL: URL? = nil, enableSwiftDataSync: Bool = true) {
+        self.baseDirectoryURL = baseDirectoryURL
+        self.isSwiftDataSyncEnabled = enableSwiftDataSync
         encoder.outputFormatting = .prettyPrinted
         decoder.dateDecodingStrategy = .iso8601
         encoder.dateEncodingStrategy = .iso8601
@@ -132,24 +148,28 @@ class WorkspaceStorageServiceOptimized: ObservableObject {
     // MARK: - Mutations
 
     private func syncSwiftDataDatabase(_ database: Database) {
+        guard isSwiftDataSyncEnabled else { return }
         Task { @MainActor in
             SwiftDataService.shared.syncWorkspaceDatabase(database)
         }
     }
 
     private func syncSwiftDataItem(_ item: WorkspaceItem) {
+        guard isSwiftDataSyncEnabled else { return }
         Task { @MainActor in
             SwiftDataService.shared.syncWorkspaceItem(item)
         }
     }
 
     private func deleteSwiftDataDatabase(id: UUID) {
+        guard isSwiftDataSyncEnabled else { return }
         Task { @MainActor in
             SwiftDataService.shared.deleteWorkspaceDatabase(id: id)
         }
     }
 
     private func deleteSwiftDataItem(id: UUID) {
+        guard isSwiftDataSyncEnabled else { return }
         Task { @MainActor in
             SwiftDataService.shared.deleteWorkspaceItem(id: id)
         }
@@ -360,6 +380,7 @@ class WorkspaceStorageServiceOptimized: ObservableObject {
     
     private func notifyChange() {
         lastUpdate = Date()
+        hasPendingChanges = true
     }
     
     private func saveDebounced() {
@@ -367,65 +388,237 @@ class WorkspaceStorageServiceOptimized: ObservableObject {
         saveTask = Task {
             try? await Task.sleep(nanoseconds: 500_000_000) // 0.5s
             if !Task.isCancelled {
-                await saveToDisk()
+                await flush(reason: .debounce)
             }
         }
     }
     
     func forceSave() async {
         saveTask?.cancel()
-        await saveToDisk()
+        await flush(reason: .force)
     }
-    
-    private func saveToDisk() async {
+
+    func flush(reason: FlushReason) async {
+        if !hasPendingChanges, reason == .debounce {
+            return
+        }
+
         let databases = Array(databasesById.values)
         let items = Array(itemsById.values)
         let versions = Array(versionsById.values)
         let databaseCount = databases.count
         let itemCount = items.count
+        let versionCount = versions.count
+        let startedAt = Date()
+
+        recordMetric(.saveStarted(reason: reason, pendingWrites: hasPendingChanges ? 1 : 0, timestamp: startedAt))
+        logSave(
+            level: "info",
+            message: "save_started",
+            fields: [
+                "reason": reason.rawValue,
+                "databaseCount": String(databaseCount),
+                "itemCount": String(itemCount),
+                "versionCount": String(versionCount),
+            ]
+        )
+
+        do {
+            let retryCount = try await saveToDiskWithRetry(
+                databases: databases,
+                items: items,
+                versions: versions,
+                reason: reason
+            )
+            hasPendingChanges = false
+
+            let durationMs = Date().timeIntervalSince(startedAt) * 1000
+            registerSaveDuration(durationMs)
+
+            let metrics = FlushMetrics(
+                reason: reason,
+                durationMs: durationMs,
+                databaseCount: databaseCount,
+                itemCount: itemCount,
+                versionCount: versionCount,
+                retryCount: retryCount,
+                success: true,
+                errorDescription: nil,
+                timestamp: Date(),
+                p50DurationMs: percentile(50),
+                p95DurationMs: percentile(95)
+            )
+            lastFlush = metrics
+            recordMetric(.saveFinished(metrics))
+            logSave(
+                level: "info",
+                message: "save_success",
+                fields: [
+                    "reason": reason.rawValue,
+                    "durationMs": String(format: "%.2f", durationMs),
+                    "retryCount": String(retryCount),
+                    "p95Ms": String(format: "%.2f", metrics.p95DurationMs),
+                ]
+            )
+        } catch {
+            let durationMs = Date().timeIntervalSince(startedAt) * 1000
+            registerSaveDuration(durationMs)
+            let metrics = FlushMetrics(
+                reason: reason,
+                durationMs: durationMs,
+                databaseCount: databaseCount,
+                itemCount: itemCount,
+                versionCount: versionCount,
+                retryCount: maxSaveRetries,
+                success: false,
+                errorDescription: error.localizedDescription,
+                timestamp: Date(),
+                p50DurationMs: percentile(50),
+                p95DurationMs: percentile(95)
+            )
+            lastFlush = metrics
+            recordMetric(.saveFinished(metrics))
+            logSave(
+                level: "error",
+                message: "save_failed",
+                fields: [
+                    "reason": reason.rawValue,
+                    "durationMs": String(format: "%.2f", durationMs),
+                    "error": error.localizedDescription,
+                ]
+            )
+        }
+    }
+
+    func flushIfPending() async {
+        guard hasPendingChanges || saveTask != nil else { return }
+        saveTask?.cancel()
+        await flush(reason: .appBackground)
+    }
+
+    func lastFlushMetrics() -> FlushMetrics {
+        lastFlush
+    }
+
+    func recentMetricEvents(limit: Int = 100) -> [WorkspaceMetricEvent] {
+        guard limit > 0 else { return [] }
+        return Array(metricEvents.suffix(limit))
+    }
+
+    func recordMetric(_ event: WorkspaceMetricEvent) {
+        metricEvents.append(event)
+        if metricEvents.count > maxMetricSamples {
+            metricEvents.removeFirst(metricEvents.count - maxMetricSamples)
+        }
+    }
+
+    private func saveToDiskWithRetry(
+        databases: [Database],
+        items: [WorkspaceItem],
+        versions: [PageVersion],
+        reason: FlushReason
+    ) async throws -> Int {
+        var attempt = 0
+        while true {
+            do {
+                try await saveToDisk(databases: databases, items: items, versions: versions)
+                return attempt
+            } catch {
+                if attempt >= maxSaveRetries {
+                    throw error
+                }
+                attempt += 1
+                logSave(
+                    level: "warning",
+                    message: "save_retry",
+                    fields: [
+                        "reason": reason.rawValue,
+                        "attempt": String(attempt),
+                        "error": error.localizedDescription,
+                    ]
+                )
+                try? await Task.sleep(nanoseconds: UInt64(150_000_000 * attempt))
+            }
+        }
+    }
+
+    private func saveToDisk(
+        databases: [Database],
+        items: [WorkspaceItem],
+        versions: [PageVersion]
+    ) async throws {
         let saveQueue = self.saveQueue
         let databasesURL = self.databasesURL
         let itemsURL = self.itemsURL
         let versionsURL = self.versionsURL
+        let recoveryMarkerURL = self.recoveryMarkerURL
+        let fileManager = self.fileManager
 
         let encoder = JSONEncoder()
         encoder.outputFormatting = .prettyPrinted
         encoder.dateEncodingStrategy = .iso8601
-        do {
-            let dbData = try encoder.encode(databases)
-            let itemsData = try encoder.encode(items)
-            let versionsData = try encoder.encode(versions)
+        let dbData = try encoder.encode(databases)
+        let itemsData = try encoder.encode(items)
+        let versionsData = try encoder.encode(versions)
 
-            // Guardar en background queue
+        try await withCheckedThrowingContinuation { continuation in
             saveQueue.async {
                 do {
+                    try Data("in_progress".utf8).write(to: recoveryMarkerURL, options: .atomic)
                     try dbData.write(to: databasesURL, options: .atomic)
                     try itemsData.write(to: itemsURL, options: .atomic)
                     try versionsData.write(to: versionsURL, options: .atomic)
-
-                    DispatchQueue.main.async {
-                        print("💾 Guardado exitoso: \(databaseCount) databases, \(itemCount) items")
+                    if fileManager.fileExists(atPath: recoveryMarkerURL.path) {
+                        try fileManager.removeItem(at: recoveryMarkerURL)
                     }
+                    continuation.resume()
                 } catch {
-                    DispatchQueue.main.async {
-                        print("❌ Error guardando: \(error)")
-                    }
+                    continuation.resume(throwing: error)
                 }
             }
-        } catch {
-            DispatchQueue.main.async {
-                print("❌ Error guardando: \(error)")
-            }
         }
+    }
+
+    private func registerSaveDuration(_ durationMs: Double) {
+        saveDurationsMs.append(durationMs)
+        if saveDurationsMs.count > maxMetricSamples {
+            saveDurationsMs.removeFirst(saveDurationsMs.count - maxMetricSamples)
+        }
+    }
+
+    private func percentile(_ p: Double) -> Double {
+        guard !saveDurationsMs.isEmpty else { return 0 }
+        let sorted = saveDurationsMs.sorted()
+        let rank = Int(((p / 100.0) * Double(sorted.count - 1)).rounded())
+        return sorted[min(max(rank, 0), sorted.count - 1)]
+    }
+
+    private func logSave(level: String, message: String, fields: [String: String]) {
+        let renderedFields = fields
+            .sorted(by: { $0.key < $1.key })
+            .map { "\($0.key)=\($0.value)" }
+            .joined(separator: " ")
+        print("[WorkspaceStorage][\(level)] \(message) \(renderedFields)")
     }
     
     // MARK: - Load
     
     private func loadAll() {
+        detectInterruptedSaveIfNeeded()
         loadDatabases()
         loadItems()
         migratePropertyKeysIfNeeded()
         loadVersions()
+    }
+
+    private func detectInterruptedSaveIfNeeded() {
+        guard fileManager.fileExists(atPath: recoveryMarkerURL.path) else { return }
+        logSave(
+            level: "warning",
+            message: "recovery_marker_detected",
+            fields: ["path": recoveryMarkerURL.path]
+        )
+        try? fileManager.removeItem(at: recoveryMarkerURL)
     }
     
     private func loadDatabases() {
@@ -565,7 +758,7 @@ extension WorkspaceStorageServiceOptimized {
         oldService.items.forEach { addItem($0) }
         
         Task {
-            await forceSave()
+            await flush(reason: .migration)
             print("✅ Migración completa")
         }
     }

@@ -14,6 +14,8 @@ class PerformanceProfiler {
     
     private var measurements: [String: [TimeInterval]] = [:]
     private var memorySnapshots: [String: (memoryUsage: UInt64, timestamp: Date)] = [:]
+    private var counters: [String: Int] = [:]
+    private var failures: [String: Int] = [:]
     
     // MARK: - Timing Measurements
     
@@ -50,6 +52,13 @@ class PerformanceProfiler {
         // Log si es lento (>100ms)
         if duration > 0.1 {
             print("⚠️ Operación lenta '\(operation)': \(String(format: "%.2f", duration * 1000))ms")
+        }
+    }
+
+    func recordCounter(_ metric: String, success: Bool = true) {
+        counters[metric, default: 0] += 1
+        if !success {
+            failures[metric, default: 0] += 1
         }
     }
     
@@ -109,13 +118,30 @@ class PerformanceProfiler {
         for (label, snapshot) in memorySnapshots.sorted(by: { $0.key < $1.key }) {
             report += "  \(label): \(formatBytes(snapshot.memoryUsage))\n"
         }
+
+        report += "\n📈 Error Rates:\n"
+        for metric in counters.keys.sorted() {
+            let total = counters[metric] ?? 0
+            let failed = failures[metric] ?? 0
+            let rate = total == 0 ? 0 : (Double(failed) / Double(total)) * 100
+            report += "  \(metric): \(String(format: "%.2f", rate))% (\(failed)/\(total))\n"
+        }
         
         return report
+    }
+
+    func percentileMs(operation: String, percentile: Double) -> Double {
+        guard let values = measurements[operation], !values.isEmpty else { return 0 }
+        let sorted = values.sorted()
+        let index = Int(((percentile / 100) * Double(sorted.count - 1)).rounded())
+        return sorted[min(max(index, 0), sorted.count - 1)] * 1000
     }
     
     func reset() {
         measurements.removeAll()
         memorySnapshots.removeAll()
+        counters.removeAll()
+        failures.removeAll()
     }
 }
 

@@ -120,10 +120,10 @@ Criterios de aceptacion:
 
 ## 5. Checklist de salida del sprint
 
-- [ ] Historias A-D completadas.
-- [ ] Test suite relevante en verde.
-- [ ] Baseline tecnico documentado.
-- [ ] Sin regressions visibles en flujos core.
+- [x] Historias A-D completadas.
+- [x] Test suite relevante en verde.
+- [x] Baseline tecnico documentado.
+- [x] Sin regressions visibles en flujos core.
 
 ## 6. Comandos de validacion sugeridos
 

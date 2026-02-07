@@ -46,12 +46,14 @@ class SpeakerChatService: ObservableObject {
     private var urlSession: URLSession
 
     private var speaker: KnownSpeaker?
+    private let workspaceAgent: WorkspaceAgentActionService
 
     init() {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 120
         config.timeoutIntervalForResource = 300
         self.urlSession = URLSession(configuration: config)
+        self.workspaceAgent = WorkspaceAgentActionService(workspaceStorage: .shared)
     }
 
     // MARK: - Conversation Management
@@ -150,10 +152,17 @@ class SpeakerChatService: ObservableObject {
         2. **get_transcript** - Get the transcript of a specific session. Can filter to show only this speaker's segments.
         3. **get_summary** - Get the AI-generated summary of a specific session.
         4. **get_speaker_info** - Get detailed statistics about this speaker.
+        5. **list_workspace_actions** - List safe internal workspace actions available to the agent.
+        6. **execute_workspace_action** - Execute a workspace action from the approved action catalog.
+        7. **confirm_workspace_action** - Confirm or reject pending high-impact actions.
+        8. **rollback_workspace_action** - Revert the most recent successful action when rollback is available.
+        9. **get_workspace_action_audit** - Retrieve audit history of automated actions.
 
         ## Guidelines
         - Use tools to fetch data before answering questions about sessions
         - When asked about conversations or topics, search sessions first, then get transcripts
+        - Before destructive changes, request confirmation and never bypass pending confirmations
+        - Prefer safe actions from the catalog instead of free-form mutations
         - Format transcripts clearly with timestamps when showing them
         - Be concise but thorough in your responses
         - Use Markdown for formatting (headers, lists, bold, etc.)
@@ -380,6 +389,16 @@ class SpeakerChatService: ObservableObject {
             return await executeGetSummary(arguments)
         case "get_speaker_info":
             return await executeGetSpeakerInfo()
+        case "list_workspace_actions":
+            return workspaceAgent.catalogMarkdown()
+        case "execute_workspace_action":
+            return workspaceAgent.executeFromTool(arguments)
+        case "confirm_workspace_action":
+            return workspaceAgent.confirmFromTool(arguments)
+        case "rollback_workspace_action":
+            return workspaceAgent.rollbackFromTool()
+        case "get_workspace_action_audit":
+            return workspaceAgent.auditFromTool(arguments)
         default:
             return "Unknown tool: \(functionName)"
         }
@@ -656,5 +675,561 @@ class SpeakerChatService: ObservableObject {
         let minutes = Int(seconds) / 60
         let secs = Int(seconds) % 60
         return String(format: "%02d:%02d", minutes, secs)
+    }
+}
+
+// MARK: - Workspace Agent Action Service
+
+@MainActor
+final class WorkspaceAgentActionService: ObservableObject {
+    enum Action: String, CaseIterable {
+        case createTask = "create_task"
+        case moveTask = "move_task"
+        case deleteItem = "delete_item"
+
+        var description: String {
+            switch self {
+            case .createTask:
+                return "Create a task in a target database."
+            case .moveTask:
+                return "Move an existing task to another status/column."
+            case .deleteItem:
+                return "Delete an item. Always requires confirmation."
+            }
+        }
+
+        var requiresExplicitConfirmation: Bool {
+            switch self {
+            case .deleteItem:
+                return true
+            case .createTask, .moveTask:
+                return false
+            }
+        }
+    }
+
+    enum AuditStatus: String {
+        case success
+        case failed
+        case pendingConfirmation = "pending_confirmation"
+        case canceled
+        case rolledBack = "rolled_back"
+    }
+
+    struct ActionDescriptor {
+        let action: Action
+        let description: String
+        let requiresExplicitConfirmation: Bool
+        let rollbackSupported: Bool
+    }
+
+    struct ActionRequest {
+        let action: Action
+        var title: String?
+        var databaseID: UUID?
+        var taskID: UUID?
+        var taskQuery: String?
+        var targetStatus: String?
+        var itemID: UUID?
+        var itemQuery: String?
+    }
+
+    struct ActionResult {
+        let success: Bool
+        let message: String
+        let requiresConfirmation: Bool
+        let confirmationToken: String?
+        let rollbackAvailable: Bool
+        let auditID: UUID
+    }
+
+    struct AuditEntry: Identifiable {
+        let id: UUID
+        let timestamp: Date
+        let action: String
+        let status: AuditStatus
+        let message: String
+        let rollbackAvailable: Bool
+        let metadata: String
+    }
+
+    private struct PendingConfirmation {
+        let token: String
+        let action: Action
+        let metadata: String
+        let payload: PendingPayload
+    }
+
+    private enum PendingPayload {
+        case moveTask(taskID: UUID, targetStatus: String)
+        case deleteItem(snapshot: WorkspaceItem)
+    }
+
+    private enum RollbackOperation {
+        case deleteItem(id: UUID)
+        case restoreItem(snapshot: WorkspaceItem)
+    }
+
+    @Published private(set) var auditTrail: [AuditEntry] = []
+
+    private let workspaceStorage: WorkspaceStorageServiceOptimized
+    private let maxAuditEntries = 200
+    private var pendingConfirmation: PendingConfirmation?
+    private var lastRollback: RollbackOperation?
+
+    init(workspaceStorage: WorkspaceStorageServiceOptimized) {
+        self.workspaceStorage = workspaceStorage
+    }
+
+    func catalog() -> [ActionDescriptor] {
+        Action.allCases.map { action in
+            ActionDescriptor(
+                action: action,
+                description: action.description,
+                requiresExplicitConfirmation: action.requiresExplicitConfirmation,
+                rollbackSupported: true
+            )
+        }
+    }
+
+    func catalogMarkdown() -> String {
+        let entries = catalog().map { descriptor in
+            let confirmation = descriptor.requiresExplicitConfirmation ? "yes" : "conditional"
+            return "- `\(descriptor.action.rawValue)`: \(descriptor.description) (confirmation: \(confirmation), rollback: yes)"
+        }
+        return """
+        Available workspace actions:
+        \(entries.joined(separator: "\n"))
+        """
+    }
+
+    func execute(request: ActionRequest) -> ActionResult {
+        if let pendingConfirmation {
+            return record(
+                action: request.action.rawValue,
+                status: .failed,
+                message: "A pending action already exists. Confirm or reject token \(pendingConfirmation.token) first.",
+                rollbackAvailable: lastRollback != nil,
+                metadata: pendingConfirmation.metadata
+            )
+        }
+
+        switch request.action {
+        case .createTask:
+            return executeCreateTask(request)
+        case .moveTask:
+            return executeMoveTask(request)
+        case .deleteItem:
+            return executeDeleteItem(request)
+        }
+    }
+
+    func confirm(token: String, accept: Bool) -> ActionResult {
+        guard let pending = pendingConfirmation else {
+            return record(
+                action: "confirm_workspace_action",
+                status: .failed,
+                message: "No pending action to confirm.",
+                rollbackAvailable: lastRollback != nil,
+                metadata: ""
+            )
+        }
+
+        guard pending.token == token else {
+            return record(
+                action: pending.action.rawValue,
+                status: .failed,
+                message: "Invalid confirmation token.",
+                rollbackAvailable: lastRollback != nil,
+                metadata: pending.metadata
+            )
+        }
+
+        if !accept {
+            pendingConfirmation = nil
+            return record(
+                action: pending.action.rawValue,
+                status: .canceled,
+                message: "Action rejected by confirmation.",
+                rollbackAvailable: lastRollback != nil,
+                metadata: pending.metadata
+            )
+        }
+
+        pendingConfirmation = nil
+        switch pending.payload {
+        case .moveTask(let taskID, let targetStatus):
+            return performMoveTask(taskID: taskID, targetStatus: targetStatus, metadata: pending.metadata)
+        case .deleteItem(let snapshot):
+            workspaceStorage.deleteItem(snapshot.id)
+            lastRollback = .restoreItem(snapshot: snapshot)
+            return record(
+                action: Action.deleteItem.rawValue,
+                status: .success,
+                message: "Deleted item '\(snapshot.displayTitle)'.",
+                rollbackAvailable: true,
+                metadata: pending.metadata
+            )
+        }
+    }
+
+    func rollbackLastAction() -> ActionResult {
+        guard let operation = lastRollback else {
+            return record(
+                action: "rollback_workspace_action",
+                status: .failed,
+                message: "No rollback available.",
+                rollbackAvailable: false,
+                metadata: ""
+            )
+        }
+
+        switch operation {
+        case .deleteItem(let id):
+            if workspaceStorage.item(withID: id) != nil {
+                workspaceStorage.deleteItem(id)
+            }
+        case .restoreItem(let snapshot):
+            if workspaceStorage.item(withID: snapshot.id) != nil {
+                workspaceStorage.updateItem(snapshot)
+            } else {
+                workspaceStorage.addItem(snapshot)
+            }
+        }
+
+        lastRollback = nil
+        return record(
+            action: "rollback_workspace_action",
+            status: .rolledBack,
+            message: "Last action rolled back.",
+            rollbackAvailable: false,
+            metadata: ""
+        )
+    }
+
+    func recentAudit(limit: Int = 10) -> [AuditEntry] {
+        guard limit > 0 else { return [] }
+        return Array(auditTrail.suffix(limit).reversed())
+    }
+
+    func executeFromTool(_ arguments: String) -> String {
+        guard let data = arguments.data(using: .utf8),
+              let args = try? JSONDecoder().decode(ExecuteWorkspaceActionArgs.self, from: data),
+              let action = Action(rawValue: args.action) else {
+            return "Error: invalid arguments. Expected action in {create_task, move_task, delete_item}."
+        }
+
+        let request = ActionRequest(
+            action: action,
+            title: args.title,
+            databaseID: args.database_id.flatMap(UUID.init(uuidString:)),
+            taskID: args.task_id.flatMap(UUID.init(uuidString:)),
+            taskQuery: args.task_query,
+            targetStatus: args.target_status,
+            itemID: args.item_id.flatMap(UUID.init(uuidString:)),
+            itemQuery: args.item_query
+        )
+
+        let result = execute(request: request)
+        return formatToolResult(result)
+    }
+
+    func confirmFromTool(_ arguments: String) -> String {
+        guard let data = arguments.data(using: .utf8),
+              let args = try? JSONDecoder().decode(ConfirmWorkspaceActionArgs.self, from: data) else {
+            return "Error: invalid confirmation arguments. Expected confirmation_token."
+        }
+
+        let result = confirm(token: args.confirmation_token, accept: args.accept ?? true)
+        return formatToolResult(result)
+    }
+
+    func rollbackFromTool() -> String {
+        let result = rollbackLastAction()
+        return formatToolResult(result)
+    }
+
+    func auditFromTool(_ arguments: String) -> String {
+        let limit: Int
+        if let data = arguments.data(using: .utf8),
+           let args = try? JSONDecoder().decode(WorkspaceActionAuditArgs.self, from: data),
+           let requestedLimit = args.limit {
+            limit = max(1, min(requestedLimit, 50))
+        } else {
+            limit = 10
+        }
+
+        let entries = recentAudit(limit: limit)
+        if entries.isEmpty {
+            return "No audit entries available."
+        }
+
+        let lines = entries.map { entry in
+            let stamp = entry.timestamp.formatted(date: .abbreviated, time: .shortened)
+            return "- [\(entry.status.rawValue)] \(entry.action) at \(stamp): \(entry.message)"
+        }
+        return "Recent action audit:\n" + lines.joined(separator: "\n")
+    }
+
+    private func executeCreateTask(_ request: ActionRequest) -> ActionResult {
+        guard let database = request.databaseID.flatMap({ workspaceStorage.database(withID: $0) })
+            ?? workspaceStorage.databases.first else {
+            return record(
+                action: Action.createTask.rawValue,
+                status: .failed,
+                message: "No database available to create tasks.",
+                rollbackAvailable: lastRollback != nil,
+                metadata: ""
+            )
+        }
+
+        let title = request.title?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let taskTitle = (title?.isEmpty == false) ? title! : "New Task"
+        let created = workspaceStorage.createTask(title: taskTitle, databaseID: database.id)
+        lastRollback = .deleteItem(id: created.id)
+
+        return record(
+            action: Action.createTask.rawValue,
+            status: .success,
+            message: "Created task '\(created.title)' in '\(database.name)'.",
+            rollbackAvailable: true,
+            metadata: "task_id=\(created.id.uuidString)"
+        )
+    }
+
+    private func executeMoveTask(_ request: ActionRequest) -> ActionResult {
+        guard let targetStatusRaw = request.targetStatus?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !targetStatusRaw.isEmpty else {
+            return record(
+                action: Action.moveTask.rawValue,
+                status: .failed,
+                message: "target_status is required for move_task.",
+                rollbackAvailable: lastRollback != nil,
+                metadata: ""
+            )
+        }
+
+        let resolution = resolveTask(taskID: request.taskID, query: request.taskQuery)
+        guard let task = resolution.item else {
+            return record(
+                action: Action.moveTask.rawValue,
+                status: .failed,
+                message: "Task not found.",
+                rollbackAvailable: lastRollback != nil,
+                metadata: request.taskQuery ?? request.taskID?.uuidString ?? ""
+            )
+        }
+
+        let metadata = "task_id=\(task.id.uuidString),target_status=\(targetStatusRaw)"
+        if resolution.isAmbiguous {
+            let token = UUID().uuidString
+            pendingConfirmation = PendingConfirmation(
+                token: token,
+                action: .moveTask,
+                metadata: metadata,
+                payload: .moveTask(taskID: task.id, targetStatus: targetStatusRaw)
+            )
+            return record(
+                action: Action.moveTask.rawValue,
+                status: .pendingConfirmation,
+                message: "Ambiguous task match. Confirmation required to move '\(task.displayTitle)'.",
+                rollbackAvailable: lastRollback != nil,
+                metadata: metadata,
+                requiresConfirmation: true,
+                confirmationToken: token
+            )
+        }
+
+        return performMoveTask(taskID: task.id, targetStatus: targetStatusRaw, metadata: metadata)
+    }
+
+    private func performMoveTask(taskID: UUID, targetStatus: String, metadata: String) -> ActionResult {
+        guard let item = workspaceStorage.item(withID: taskID) else {
+            return record(
+                action: Action.moveTask.rawValue,
+                status: .failed,
+                message: "Task disappeared before move.",
+                rollbackAvailable: lastRollback != nil,
+                metadata: metadata
+            )
+        }
+
+        guard let resolvedStatus = resolveStatus(for: item, rawStatus: targetStatus) else {
+            return record(
+                action: Action.moveTask.rawValue,
+                status: .failed,
+                message: "Target status '\(targetStatus)' not found.",
+                rollbackAvailable: lastRollback != nil,
+                metadata: metadata
+            )
+        }
+
+        lastRollback = .restoreItem(snapshot: item)
+        workspaceStorage.moveItem(item.id, toStatus: resolvedStatus)
+        return record(
+            action: Action.moveTask.rawValue,
+            status: .success,
+            message: "Moved '\(item.displayTitle)' to '\(resolvedStatus)'.",
+            rollbackAvailable: true,
+            metadata: metadata
+        )
+    }
+
+    private func executeDeleteItem(_ request: ActionRequest) -> ActionResult {
+        let resolvedItem: WorkspaceItem?
+        if let itemID = request.itemID {
+            resolvedItem = workspaceStorage.item(withID: itemID)
+        } else {
+            resolvedItem = resolveItem(query: request.itemQuery)
+        }
+
+        guard let item = resolvedItem else {
+            return record(
+                action: Action.deleteItem.rawValue,
+                status: .failed,
+                message: "Item not found for deletion.",
+                rollbackAvailable: lastRollback != nil,
+                metadata: request.itemQuery ?? request.itemID?.uuidString ?? ""
+            )
+        }
+
+        let token = UUID().uuidString
+        let metadata = "item_id=\(item.id.uuidString),title=\(item.displayTitle)"
+        pendingConfirmation = PendingConfirmation(
+            token: token,
+            action: .deleteItem,
+            metadata: metadata,
+            payload: .deleteItem(snapshot: item)
+        )
+
+        return record(
+            action: Action.deleteItem.rawValue,
+            status: .pendingConfirmation,
+            message: "Deletion requires confirmation for '\(item.displayTitle)'.",
+            rollbackAvailable: lastRollback != nil,
+            metadata: metadata,
+            requiresConfirmation: true,
+            confirmationToken: token
+        )
+    }
+
+    private func resolveTask(taskID: UUID?, query: String?) -> (item: WorkspaceItem?, isAmbiguous: Bool) {
+        if let taskID, let item = workspaceStorage.item(withID: taskID), item.itemType == .task, !item.isArchived {
+            return (item, false)
+        }
+
+        let trimmedQuery = query?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+        guard !trimmedQuery.isEmpty else { return (nil, false) }
+
+        let scored = workspaceStorage.items
+            .filter { $0.itemType == .task && !$0.isArchived }
+            .map { ($0, scoreMatch(text: $0.title.lowercased(), query: trimmedQuery)) }
+            .filter { $0.1 > 0 }
+            .sorted {
+                if $0.1 == $1.1 {
+                    return $0.0.updatedAt > $1.0.updatedAt
+                }
+                return $0.1 > $1.1
+            }
+
+        guard let best = scored.first else { return (nil, false) }
+        let secondScore = scored.count > 1 ? scored[1].1 : 0
+        let ambiguous = secondScore > 0 && abs(best.1 - secondScore) < 0.1
+        return (best.0, ambiguous)
+    }
+
+    private func resolveItem(query: String?) -> WorkspaceItem? {
+        let trimmedQuery = query?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+        guard !trimmedQuery.isEmpty else { return nil }
+
+        return workspaceStorage.items
+            .filter { !$0.isArchived }
+            .map { ($0, scoreMatch(text: $0.title.lowercased(), query: trimmedQuery)) }
+            .filter { $0.1 > 0 }
+            .sorted {
+                if $0.1 == $1.1 {
+                    return $0.0.updatedAt > $1.0.updatedAt
+                }
+                return $0.1 > $1.1
+            }
+            .first?.0
+    }
+
+    private func resolveStatus(for item: WorkspaceItem, rawStatus: String) -> String? {
+        let normalized = rawStatus.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalized.isEmpty else { return nil }
+
+        if let databaseID = item.workspaceID,
+           let database = workspaceStorage.database(withID: databaseID),
+           !database.kanbanColumns.isEmpty {
+            let match = database.kanbanColumns
+                .map { ($0.name, scoreMatch(text: $0.name.lowercased(), query: normalized)) }
+                .filter { $0.1 > 0 }
+                .sorted { $0.1 > $1.1 }
+                .first?.0
+            return match
+        }
+
+        return rawStatus.capitalized
+    }
+
+    private func scoreMatch(text: String, query: String) -> Double {
+        if text == query { return 1.0 }
+        if text.hasPrefix(query) { return 0.9 }
+        if text.contains(query) { return 0.7 }
+
+        let queryTokens = Set(query.split(separator: " ").map(String.init))
+        let textTokens = Set(text.split(separator: " ").map(String.init))
+        guard !queryTokens.isEmpty else { return 0 }
+        let overlap = queryTokens.intersection(textTokens).count
+        if overlap == 0 { return 0 }
+        return 0.4 + (Double(overlap) / Double(queryTokens.count)) * 0.2
+    }
+
+    private func record(
+        action: String,
+        status: AuditStatus,
+        message: String,
+        rollbackAvailable: Bool,
+        metadata: String,
+        requiresConfirmation: Bool = false,
+        confirmationToken: String? = nil
+    ) -> ActionResult {
+        let audit = AuditEntry(
+            id: UUID(),
+            timestamp: Date(),
+            action: action,
+            status: status,
+            message: message,
+            rollbackAvailable: rollbackAvailable,
+            metadata: metadata
+        )
+        auditTrail.append(audit)
+        if auditTrail.count > maxAuditEntries {
+            auditTrail.removeFirst(auditTrail.count - maxAuditEntries)
+        }
+
+        return ActionResult(
+            success: status == .success || status == .rolledBack,
+            message: message,
+            requiresConfirmation: requiresConfirmation,
+            confirmationToken: confirmationToken,
+            rollbackAvailable: rollbackAvailable,
+            auditID: audit.id
+        )
+    }
+
+    private func formatToolResult(_ result: ActionResult) -> String {
+        if result.requiresConfirmation, let token = result.confirmationToken {
+            return """
+            ⚠️ Confirmation required.
+            token: \(token)
+            message: \(result.message)
+            """
+        }
+
+        let status = result.success ? "✅" : "❌"
+        let rollback = result.rollbackAvailable ? "yes" : "no"
+        return "\(status) \(result.message)\nrollback_available: \(rollback)\naudit_id: \(result.auditID.uuidString)"
     }
 }

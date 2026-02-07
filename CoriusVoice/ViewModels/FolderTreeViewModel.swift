@@ -103,16 +103,12 @@ class FolderTreeViewModel: ObservableObject {
     }
 
     func reloadSessions() {
-        // Use DispatchQueue to ensure we're not publishing during a view update
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-            self.sessionMetadata = SwiftDataService.shared.fetchAllSessions()
-            if self.sessionMetadata.isEmpty {
-                self.sessions = self.storage.loadSessions()
-                self.hasDiskSessions = !self.sessions.isEmpty
-            } else {
-                self.refreshDiskSessionStatus()
-            }
+        sessionMetadata = SwiftDataService.shared.fetchAllSessions()
+        if sessionMetadata.isEmpty {
+            sessions = storage.loadSessions()
+            hasDiskSessions = !sessions.isEmpty
+        } else {
+            refreshDiskSessionStatus()
         }
     }
 
@@ -125,15 +121,7 @@ class FolderTreeViewModel: ObservableObject {
 
     /// Sessions filtered by current selection
     var filteredSessions: [RecordingSession] {
-        // If we have SwiftData metadata but no full sessions loaded, load them now
-        if useSwiftData && sessions.isEmpty {
-            // Load full sessions synchronously (they're cached after first load)
-            let loadedSessions = storage.loadSessions()
-            // Can't mutate self in computed property, but loadSessions() caches internally
-            // Return filtered from the loaded sessions directly
-            return filterSessions(loadedSessions)
-        }
-        
+        // Keep computed properties side-effect free to avoid view update cycles.
         return filterSessions(sessions)
     }
     
@@ -237,14 +225,10 @@ class FolderTreeViewModel: ObservableObject {
         if let session = sessions.first(where: { $0.id == id }) {
             return session
         }
-        
-        // Otherwise load all sessions and find the one we need
+
+        // Otherwise load from storage cache without mutating @Published properties.
+        // This function is called from selection bindings and must remain side-effect free.
         let allSessions = storage.loadSessions()
-        if sessions.isEmpty || sessions.first(where: { $0.id == id }) == nil {
-            DispatchQueue.main.async { [weak self] in
-                self?.sessions = allSessions
-            }
-        }
         if let fullSession = allSessions.first(where: { $0.id == id }) {
             return fullSession
         }
@@ -307,9 +291,12 @@ class FolderTreeViewModel: ObservableObject {
     
     /// Load sessions matching current filter (called when user views list)
     func loadFilteredSessions() {
-        if sessions.isEmpty {
-            sessions = storage.loadSessions()
-        }
+        ensureFullSessionsLoaded()
+    }
+
+    private func ensureFullSessionsLoaded() {
+        guard sessions.isEmpty else { return }
+        sessions = storage.loadSessions()
     }
 
     /// Root folders (no parent)
@@ -436,6 +423,7 @@ class FolderTreeViewModel: ObservableObject {
     }
 
     func toggleLabel(_ labelID: UUID, for sessionID: UUID) {
+        ensureFullSessionsLoaded()
         guard let session = sessions.first(where: { $0.id == sessionID }) else { return }
 
         if session.labelIDs.contains(labelID) {

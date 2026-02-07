@@ -904,80 +904,135 @@ class WhisperService: ObservableObject {
             return nil
         }
 
-        let startTime = Date()
         print("[WhisperKit] 🚀 Starting transcription of \(samples.count) samples...")
 
         do {
-            // If no language specified, detect it first for better accuracy
-            var effectiveLanguage = language
-            if language == nil {
-                print("[WhisperKit] 🌍 Auto-detecting language...")
-                // Note: WhisperKit has a typo in the method name: "detectLangauge" instead of "detectLanguage"
-                let (detectedLang, probabilities) = try await whisper.detectLangauge(audioArray: samples)
-                effectiveLanguage = detectedLang
-
-                // Log top 3 language probabilities
-                let topLangs = probabilities.sorted { $0.value > $1.value }.prefix(3)
-                let langInfo = topLangs.map { "\($0.key): \(String(format: "%.1f%%", $0.value * 100))" }.joined(separator: ", ")
-                print("[WhisperKit] 🌍 Detected language: \(detectedLang) (probabilities: \(langInfo))")
-            }
-
-            let options = DecodingOptions(
-                task: .transcribe,
-                language: effectiveLanguage,
-                temperature: 0.0,
-                temperatureFallbackCount: 2,
-                sampleLength: 224,
-                usePrefillPrompt: true,
-                usePrefillCache: true,
-                skipSpecialTokens: true,
-                withoutTimestamps: true,
-                wordTimestamps: false,
-                suppressBlank: true,
-                compressionRatioThreshold: 2.4,
-                logProbThreshold: -1.0,
-                firstTokenLogProbThreshold: -1.5,
-                noSpeechThreshold: 0.6
+            return try await transcribeAudioSamplesOnce(
+                whisper: whisper,
+                samples: samples,
+                language: language
             )
-
-            let results = try await whisper.transcribe(
-                audioArray: samples,
-                decodeOptions: options
-            )
-
-            let elapsed = Date().timeIntervalSince(startTime)
-            print("[WhisperKit] ⏱️ Transcription completed in \(String(format: "%.2f", elapsed))s")
-            print("[WhisperKit] 📊 Results count: \(results.count)")
-
-            var transcriptText = ""
-            for (index, result) in results.enumerated() {
-                print("[WhisperKit] 📝 Result \(index): \(result.segments.count) segments, language=\(result.language ?? "unknown")")
-                for segment in result.segments {
-                    let text = segment.text.trimmingCharacters(in: .whitespaces)
-                    print("[WhisperKit] 📝 Segment: '\(text.prefix(100))'")
-                    if !text.isEmpty {
-                        if !transcriptText.isEmpty {
-                            transcriptText += " "
-                        }
-                        transcriptText += text
-                    }
+        } catch {
+            if await recoverStreamingModelIfConfigurationMissing(error),
+               let recoveredWhisper = streamingWhisperKit {
+                print("[WhisperKit] 🔄 Retrying transcription after streaming model recovery...")
+                do {
+                    return try await transcribeAudioSamplesOnce(
+                        whisper: recoveredWhisper,
+                        samples: samples,
+                        language: language
+                    )
+                } catch {
+                    print("[WhisperKit] ❌ Retry after recovery failed: \(error.localizedDescription)")
+                    print("[WhisperKit] ❌ Retry error details: \(error)")
+                    return nil
                 }
             }
 
-            if transcriptText.isEmpty {
-                print("[WhisperKit] ⚠️ Transcription returned empty text")
-            } else {
-                print("[WhisperKit] ✅ Final transcript: '\(transcriptText.prefix(100))...'")
-            }
-
-            return transcriptText.isEmpty ? nil : transcriptText
-
-        } catch {
-            let elapsed = Date().timeIntervalSince(startTime)
-            print("[WhisperKit] ❌ Audio transcription failed after \(String(format: "%.2f", elapsed))s: \(error.localizedDescription)")
+            print("[WhisperKit] ❌ Audio transcription failed: \(error.localizedDescription)")
             print("[WhisperKit] ❌ Error details: \(error)")
             return nil
         }
+    }
+
+    private func transcribeAudioSamplesOnce(
+        whisper: WhisperKit,
+        samples: [Float],
+        language: String?
+    ) async throws -> String? {
+        let startTime = Date()
+
+        // If no language specified, detect it first for better accuracy
+        var effectiveLanguage = language
+        if language == nil {
+            print("[WhisperKit] 🌍 Auto-detecting language...")
+            // Note: WhisperKit has a typo in the method name: "detectLangauge" instead of "detectLanguage"
+            let (detectedLang, probabilities) = try await whisper.detectLangauge(audioArray: samples)
+            effectiveLanguage = detectedLang
+
+            // Log top 3 language probabilities
+            let topLangs = probabilities.sorted { $0.value > $1.value }.prefix(3)
+            let langInfo = topLangs.map { "\($0.key): \(String(format: "%.1f%%", $0.value * 100))" }.joined(separator: ", ")
+            print("[WhisperKit] 🌍 Detected language: \(detectedLang) (probabilities: \(langInfo))")
+        }
+
+        let options = DecodingOptions(
+            task: .transcribe,
+            language: effectiveLanguage,
+            temperature: 0.0,
+            temperatureFallbackCount: 2,
+            sampleLength: 224,
+            usePrefillPrompt: true,
+            usePrefillCache: true,
+            skipSpecialTokens: true,
+            withoutTimestamps: true,
+            wordTimestamps: false,
+            suppressBlank: true,
+            compressionRatioThreshold: 2.4,
+            logProbThreshold: -1.0,
+            firstTokenLogProbThreshold: -1.5,
+            noSpeechThreshold: 0.6
+        )
+
+        let results = try await whisper.transcribe(
+            audioArray: samples,
+            decodeOptions: options
+        )
+
+        let elapsed = Date().timeIntervalSince(startTime)
+        print("[WhisperKit] ⏱️ Transcription completed in \(String(format: "%.2f", elapsed))s")
+        print("[WhisperKit] 📊 Results count: \(results.count)")
+
+        var transcriptText = ""
+        for (index, result) in results.enumerated() {
+            print("[WhisperKit] 📝 Result \(index): \(result.segments.count) segments, language=\(result.language ?? "unknown")")
+            for segment in result.segments {
+                let text = segment.text.trimmingCharacters(in: .whitespaces)
+                print("[WhisperKit] 📝 Segment: '\(text.prefix(100))'")
+                if !text.isEmpty {
+                    if !transcriptText.isEmpty {
+                        transcriptText += " "
+                    }
+                    transcriptText += text
+                }
+            }
+        }
+
+        if transcriptText.isEmpty {
+            print("[WhisperKit] ⚠️ Transcription returned empty text")
+        } else {
+            print("[WhisperKit] ✅ Final transcript: '\(transcriptText.prefix(100))...'")
+        }
+
+        return transcriptText.isEmpty ? nil : transcriptText
+    }
+
+    private func recoverStreamingModelIfConfigurationMissing(_ error: Error) async -> Bool {
+        guard isMissingModelConfigurationError(error) else { return false }
+
+        let modelToReload = await MainActor.run { streamingModelSize ?? .base }
+        print("[WhisperKit] ⚠️ Missing model configuration detected (\(error.localizedDescription)). Reloading streaming model \(modelToReload.rawValue)...")
+
+        await MainActor.run {
+            streamingWhisperKit = nil
+            isStreamingModelLoaded = false
+        }
+
+        do {
+            try await loadStreamingModel(modelToReload)
+            print("[WhisperKit] ✅ Streaming model recovered")
+            return true
+        } catch {
+            print("[WhisperKit] ❌ Streaming model recovery failed: \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    private func isMissingModelConfigurationError(_ error: Error) -> Bool {
+        let description = "\(error) \(error.localizedDescription)".lowercased()
+        return description.contains("configurationmissing") ||
+            (description.contains("required configuration file missing") && description.contains("tokenizer.json")) ||
+            description.contains("tokenizer.json")
     }
 
     /// Check if both models are loaded (streaming + main)

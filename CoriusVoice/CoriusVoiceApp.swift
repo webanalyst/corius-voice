@@ -56,7 +56,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         HotkeyService.shared.stop()
         floatingBarController?.close()
-        Task { await WorkspaceStorageServiceOptimized.shared.forceSave() }
+        flushWorkspaceBeforeTermination()
+    }
+
+    func applicationDidResignActive(_ notification: Notification) {
+        Task {
+            await WorkspaceStorageServiceOptimized.shared.flushIfPending()
+        }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -109,6 +115,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // 3. Request Screen Recording permission (required for system audio capture)
         requestScreenRecordingPermission()
+    }
+
+    private func flushWorkspaceBeforeTermination(timeout: TimeInterval = 1.5) {
+        let group = DispatchGroup()
+        group.enter()
+        Task {
+            await WorkspaceStorageServiceOptimized.shared.flush(reason: .appTerminate)
+            group.leave()
+        }
+        _ = group.wait(timeout: .now() + timeout)
     }
 
     private func requestScreenRecordingPermission() {
@@ -245,6 +261,7 @@ class AppState: ObservableObject {
         Task { @MainActor in
             let meetingNote = SessionIntegrationService.shared.upsertMeetingNote(for: session)
             _ = SessionIntegrationService.shared.syncActions(from: session, meetingNote: meetingNote)
+            SessionIntegrationService.shared.reconcileMeetingGraph(sessionID: session.id)
         }
     }
 

@@ -2,6 +2,52 @@ import Foundation
 
 // MARK: - Workspace Storage Protocol
 
+enum FlushReason: String {
+    case debounce
+    case force
+    case appTerminate
+    case appBackground
+    case retry
+    case migration
+    case manual
+}
+
+struct FlushMetrics {
+    let reason: FlushReason
+    let durationMs: Double
+    let databaseCount: Int
+    let itemCount: Int
+    let versionCount: Int
+    let retryCount: Int
+    let success: Bool
+    let errorDescription: String?
+    let timestamp: Date
+    let p50DurationMs: Double
+    let p95DurationMs: Double
+
+    static var empty: FlushMetrics {
+        FlushMetrics(
+            reason: .manual,
+            durationMs: 0,
+            databaseCount: 0,
+            itemCount: 0,
+            versionCount: 0,
+            retryCount: 0,
+            success: true,
+            errorDescription: nil,
+            timestamp: Date(),
+            p50DurationMs: 0,
+            p95DurationMs: 0
+        )
+    }
+}
+
+enum WorkspaceMetricEvent {
+    case saveStarted(reason: FlushReason, pendingWrites: Int, timestamp: Date)
+    case saveFinished(FlushMetrics)
+    case voiceCommand(intent: String, success: Bool, reason: String?, timestamp: Date)
+}
+
 /// Protocolo para abstracción de almacenamiento de workspace
 /// Permite testing, inyección de dependencias, y múltiples implementaciones
 protocol WorkspaceStorageProtocol: AnyObject, ObservableObject {
@@ -62,6 +108,18 @@ protocol WorkspaceStorageProtocol: AnyObject, ObservableObject {
     
     /// Forzar guardado inmediato
     func forceSave() async
+
+    /// Flush explícito con razón de guardado para telemetría
+    func flush(reason: FlushReason) async
+
+    /// Guarda solo si hay cambios pendientes
+    func flushIfPending() async
+
+    /// Últimas métricas de persistencia
+    func lastFlushMetrics() -> FlushMetrics
+
+    /// Registro de eventos técnicos del workspace
+    func recordMetric(_ event: WorkspaceMetricEvent)
 }
 
 // MARK: - Conformance

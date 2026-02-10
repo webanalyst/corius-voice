@@ -236,13 +236,17 @@ struct SessionsView: View {
 
                 // Column 2: Sessions list
                 SessionsListView(
-                    sessionMetadata: filteredSessionMetadata,
+                    repository: sessionRepository,
                     selectedSessionID: Binding(
                         get: { selectedSession?.id },
                         set: { newID in
                             if let id = newID {
-                                // Load full session when selected
-                                selectedSession = folderViewModel.loadFullSession(id: id)
+                                // Load full session from repository cache when selected
+                                if let fullSession = sessionRepository.getFullSession(id: id) {
+                                    selectedSession = fullSession
+                                } else {
+                                    selectedSession = folderViewModel.loadFullSession(id: id)
+                                }
                             } else {
                                 selectedSession = nil
                             }
@@ -253,6 +257,7 @@ struct SessionsView: View {
                         viewModel.deleteSession(id)
                         Task { @MainActor in
                             folderViewModel.reloadSessions()
+                            sessionRepository.reloadTotalCount()
                         }
                     },
                     folderViewModel: folderViewModel

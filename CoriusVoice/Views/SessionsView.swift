@@ -78,16 +78,19 @@ struct SessionsView: View {
     @EnvironmentObject var appState: AppState
     @StateObject private var folderViewModel = FolderTreeViewModel()
     @StateObject private var viewModel = SessionsViewModel()
+    @StateObject private var sessionRepository = SessionRepository.shared
     @State private var selectedSession: RecordingSession?
     @State private var showingNewSession = false
     @State private var showingImporter = false
     @State private var searchText = ""
+    @State private var searchDebouncer = Debouncer(delay: 0.3)
     @State private var importError: String?
     @State private var showingImportError = false
     @State private var importOrphansMessage: String?
     @State private var showingImportOrphansResult = false
     @State private var dedupeMessage: String?
     @State private var showingDedupeResult = false
+    @State private var filteredSessions: [SDSession] = []
 
     // Resizable column widths
     @State private var folderColumnWidth: CGFloat = 220

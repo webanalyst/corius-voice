@@ -428,6 +428,14 @@ final class SwiftDataService {
         let deleteIDs = deleteCandidates.subtracting(keepIDs)
         guard !deleteIDs.isEmpty else { return 0 }
 
+        // Batch remove from search index for efficiency
+        Task { @MainActor in
+            for id in deleteIDs {
+                searchIndex.removeFromIndex(sessionID: id)
+            }
+            logger.info("🗑️ Batch removed \(deleteIDs.count) sessions from search index")
+        }
+
         for id in deleteIDs {
             if let session = getSession(id: id) {
                 modelContext.delete(session)

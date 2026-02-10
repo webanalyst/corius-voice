@@ -490,6 +490,47 @@ final class TranscriptSearchIndex: ObservableObject {
         print("Search index rebuilt - will be populated as sessions are accessed")
     }
     
+    /// Rebuild entire index from all sessions (called after migration or import)
+    func rebuildAll() async throws {
+        print("🔄 Starting full search index rebuild...")
+        let startTime = Date()
+        isIndexing = true
+        
+        // Clear existing index
+        invertedIndex.removeAll()
+        sessionContentCache.removeAll()
+        sessionSegments.removeAll()
+        
+        // Batch index all sessions from SwiftData
+        let swiftDataService = SwiftDataService.shared
+        let allSessions = swiftDataService.fetchAllSessions()
+        
+        var indexedCount = 0
+        var errorCount = 0
+        
+        for session in allSessions {
+            do {
+                // Load full transcript from StorageService
+                let storageSession = StorageService.shared.loadSession(id: session.id)
+                if let storageSession = storageSession {
+                    indexSession(session, transcriptSegments: storageSession.transcriptSegments)
+                    indexedCount += 1
+                }
+            } catch {
+                errorCount += 1
+                print("⚠️ Failed to index session \(session.id): \(error.localizedDescription)")
+            }
+        }
+        
+        isIndexing = false
+        let duration = Date().timeIntervalSince(startTime)
+        print("✅ Search index rebuild complete: \(indexedCount) sessions indexed in \(String(format: "%.2f", duration))s")
+        
+        if errorCount > 0 {
+            print("⚠️ \(errorCount) sessions failed to index")
+        }
+    }
+    
     // MARK: - Statistics
     
     func getIndexStats() -> (tokenCount: Int, sessionCount: Int, segmentCount: Int) {

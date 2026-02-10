@@ -5,8 +5,12 @@ import os.log
 import AppKit
 #endif
 
+// Transcript search index for fast full-text search
+private let searchIndex = TranscriptSearchIndex.shared
+
 // MARK: - SwiftData Service
 // Provides fast metadata access via SwiftData while keeping full data in JSON files
+// Integrated with versioned schema management for safe migrations
 
 @MainActor
 final class SwiftDataService {
@@ -19,14 +23,11 @@ final class SwiftDataService {
     
     private init() {
         do {
-            let schema = Schema([
-                SDSession.self,
-                SDFolder.self,
-                SDLabel.self,
-                SDKnownSpeaker.self,
-                SDWorkspaceDatabase.self,
-                SDWorkspaceItem.self
-            ])
+            // Use versioned schema from SchemaVersionManager
+            let schemaVersionManager = SchemaVersionManager.shared
+            schemaVersionManager.checkSchemaVersion(onLaunch: true)
+            
+            let schema = schemaVersionManager.getCurrentSchema()
             
             let modelConfiguration = ModelConfiguration(
                 schema: schema,
@@ -34,14 +35,14 @@ final class SwiftDataService {
                 allowsSave: true
             )
             
-            modelContainer = try ModelContainer(
-                for: schema,
-                configurations: [modelConfiguration]
-            )
+            modelContainer = try ModelContainer.createWithVersionedSchema()
             modelContext = modelContainer.mainContext
             modelContext.autosaveEnabled = true
             
-            logger.info("✅ SwiftData initialized successfully")
+            logger.info("✅ SwiftData initialized successfully with schema V\(schemaVersionManager.currentSchemaVersion.rawValue)")
+            
+            // Log migration statistics for debugging
+            schemaVersionManager.logMigrationStatistics()
         } catch {
             logger.error("❌ Failed to initialize SwiftData: \(error.localizedDescription)")
             fatalError("Failed to initialize SwiftData: \(error)")
@@ -61,6 +62,10 @@ final class SwiftDataService {
     }
     
     func migrateFromJSONIfNeeded() async {
+        // Check schema version before migration
+        let schemaVersionManager = SchemaVersionManager.shared
+        schemaVersionManager.checkSchemaVersion(onLaunch: true)
+        
         guard !hasMigrated else {
             logger.info("📦 SwiftData already migrated")
             return
@@ -68,19 +73,48 @@ final class SwiftDataService {
         
         logger.info("📦 Starting SwiftData migration from JSON...")
         
-        await migrateFolders()
-        await migrateLabels()
-        await migrateSessions()
-        await migrateSpeakers()
-        await migrateWorkspace()
-        
-        hasMigrated = true
-        logger.info("✅ SwiftData migration complete")
+        do {
+            await migrateFolders()
+            await migrateLabels()
+            await migrateSessions()
+            await migrateSpeakers()
+            await migrateWorkspace()
+            
+            hasMigrated = true
+            
+            // Mark schema migration as complete
+            schemaVersionManager.markMigrationComplete(to: .v1)
+            
+            // Perform post-migration tasks (rebuild indexes)
+            try await schemaVersionManager.performPostMigrationTasks(
+                fromVersion: 0,
+                toVersion: schemaVersionManager.currentSchemaVersion.rawValue
+            )
+            
+            // Rebuild transcript search index after migration
+            await rebuildTranscriptSearchIndex()
+            
+            logger.info("✅ SwiftData migration complete with schema V\(schemaVersionManager.currentSchemaVersion.rawValue)")
+        } catch {
+            logger.error("❌ Migration failed: \(error.localizedDescription)")
+            schemaVersionManager.handleMigrationError(
+                error,
+                fromVersion: 0,
+                toVersion: schemaVersionManager.currentSchemaVersion.rawValue
+            )
+        }
     }
 
     func migrateWorkspaceIfNeeded() async {
         guard !hasMigratedWorkspace else { return }
-        await migrateWorkspace()
+        
+        do {
+            await migrateWorkspace()
+            hasMigratedWorkspace = true
+            logger.info("✅ Workspace migration complete")
+        } catch {
+            logger.error("❌ Workspace migration failed: \(error.localizedDescription)")
+        }
     }
     
     private func migrateFolders() async {
@@ -304,7 +338,16 @@ final class SwiftDataService {
         let sdSession = SDSession.from(session)
         modelContext.insert(sdSession)
         try? modelContext.save()
-        logger.info("📝 Inserted session: \(session.id)")
+        
+        // Update search index with transcript content
+        Task { @MainActor in
+            do {
+                searchIndex.indexSession(sdSession, transcriptSegments: session.transcriptSegments)
+                logger.info("📝 Inserted session: \(session.id) and indexed \(session.transcriptSegments.count) transcript segments")
+            } catch {
+                logger.warning("⚠️ Failed to index session \(session.id): \(error.localizedDescription)")
+            }
+        }
     }
     
     func updateSession(_ session: RecordingSession) {
@@ -332,7 +375,12 @@ final class SwiftDataService {
             existing.updatedAt = Date()
             
             try? modelContext.save()
-            logger.info("📝 Updated session: \(session.id)")
+            
+            // Update search index (debounced for rapid edits)
+            Task { @MainActor in
+                searchIndex.updateSession(existing, transcriptSegments: session.transcriptSegments)
+                logger.debug("📝 Updated session: \(session.id) and queued index refresh")
+            }
         } else {
             insertSession(session)
         }
@@ -342,7 +390,12 @@ final class SwiftDataService {
         if let session = getSession(id: id) {
             modelContext.delete(session)
             try? modelContext.save()
-            logger.info("🗑️ Deleted session: \(id)")
+            
+            // Remove from search index
+            Task { @MainActor in
+                searchIndex.removeFromIndex(sessionID: id)
+                logger.info("🗑️ Deleted session: \(id) and removed from search index")
+            }
         }
     }
 

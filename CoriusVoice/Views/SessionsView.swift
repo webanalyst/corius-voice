@@ -407,17 +407,17 @@ struct SessionsView: View {
     }
 }
 
-// MARK: - Sessions List View
+// MARK: - Sessions List View (Lazy Loading)
 
 struct SessionsListView: View {
-    let sessionMetadata: [SDSession]
+    @ObservedObject var repository: SessionRepository
     @Binding var selectedSessionID: UUID?
     @Binding var searchText: String
     let onDelete: (UUID) -> Void
     @ObservedObject var folderViewModel: FolderTreeViewModel
 
-    @State private var showingMoveSheet = false
-    @State private var sessionToMove: SDSession?
+    @State private var searchDebouncer = Debouncer(delay: 0.3)
+    @State private var visibleSessions: Set<UUID> = []
 
     var body: some View {
         VStack(spacing: 0) {
@@ -426,7 +426,7 @@ struct SessionsListView: View {
                 Text(headerTitle)
                     .font(.headline)
                 Spacer()
-                Text("\(sessionMetadata.count)")
+                Text("\(repository.totalCount)")
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .padding(.horizontal, 8)
@@ -444,8 +444,20 @@ struct SessionsListView: View {
                     .foregroundColor(.secondary)
                 TextField("Search sessions...", text: $searchText)
                     .textFieldStyle(.plain)
+                    .onChange(of: searchText) { _, newValue in
+                        searchDebouncer.debounce {
+                            Task {
+                                await updateSearch(query: newValue)
+                            }
+                        }
+                    }
                 if !searchText.isEmpty {
-                    Button(action: { searchText = "" }) {
+                    Button(action: {
+                        searchText = ""
+                        Task {
+                            await updateSearch(query: "")
+                        }
+                    }) {
                         Image(systemName: "xmark.circle.fill")
                             .foregroundColor(.secondary)
                     }
@@ -460,71 +472,113 @@ struct SessionsListView: View {
 
             Divider()
 
-            if sessionMetadata.isEmpty {
-                VStack(spacing: 12) {
-                    Spacer()
-                    Image(systemName: "waveform.circle")
-                        .font(.system(size: 48))
-                        .foregroundColor(.secondary.opacity(0.5))
-                    Text("No sessions")
-                        .font(.headline)
-                        .foregroundColor(.secondary)
-                    Text(emptyStateMessage)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
-                    Spacer()
-                }
-                .padding()
+            if repository.sessions.isEmpty && !repository.isLoading {
+                emptyStateView
             } else {
-                List(sessionMetadata, id: \.id, selection: $selectedSessionID) { session in
-                    SessionRowFromMetadata(
-                        session: session,
-                        folderViewModel: folderViewModel
-                    )
-                    .tag(session.id)
-                    .contextMenu {
-                        // Move to folder
-                        Menu("Move to...") {
-                            ForEach(folderViewModel.rootFolders) { folder in
-                                FolderMenuItemForMetadata(
-                                    folder: folder,
-                                    folderViewModel: folderViewModel,
-                                    sessionID: session.id
-                                )
-                            }
-                        }
-
-                        // Labels submenu
-                        Menu("Labels") {
-                            ForEach(folderViewModel.labels.sorted) { label in
-                                Button(action: {
-                                    folderViewModel.toggleLabel(label.id, for: session.id)
-                                }) {
-                                    HStack {
-                                        Circle()
-                                            .fill(Color(hex: label.color) ?? .gray)
-                                            .frame(width: 8, height: 8)
-                                        Text(label.name)
-                                        if session.labelIDs.contains(label.id) {
-                                            Image(systemName: "checkmark")
-                                        }
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(repository.sessions, id: \.id) { session in
+                            SessionRowFromMetadata(
+                                session: session,
+                                folderViewModel: folderViewModel
+                            )
+                            .tag(session.id)
+                            .background(
+                                GeometryReader { geo in
+                                    Color.clear.preference(
+                                        key: VisibleItemPreferenceKey.self,
+                                        value: [geo.frame(in: .named("scroll")).minY < 500 ? session.id : nil]
+                                    )
+                                }
+                            )
+                            .onAppear {
+                                visibleSessions.insert(session.id)
+                                // Load next page if approaching end
+                                if session.id == repository.sessions.last?.id {
+                                    Task {
+                                        await repository.loadNextPage()
                                     }
                                 }
                             }
+                            .onDisappear {
+                                visibleSessions.remove(session.id)
+                            }
+                            .contextMenu {
+                                sessionContextMenu(for: session)
+                            }
                         }
 
-                        Divider()
-
-                        Button("Delete", role: .destructive) {
-                            onDelete(session.id)
-                            if selectedSessionID == session.id {
-                                selectedSessionID = nil
-                            }
+                        // Loading indicator at bottom
+                        if repository.isLoading {
+                            ProgressView()
+                                .padding()
                         }
                     }
                 }
-                .listStyle(.plain)
+                .coordinateSpace(name: "scroll")
+            }
+        }
+        .onAppear {
+            Task {
+                await repository.loadFirstPage()
+            }
+        }
+    }
+
+    private var emptyStateView: some View {
+        VStack(spacing: 12) {
+            Spacer()
+            Image(systemName: "waveform.circle")
+                .font(.system(size: 48))
+                .foregroundColor(.secondary.opacity(0.5))
+            Text("No sessions")
+                .font(.headline)
+                .foregroundColor(.secondary)
+            Text(emptyStateMessage)
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+            Spacer()
+        }
+        .padding()
+    }
+
+    @ViewBuilder
+    private func sessionContextMenu(for session: SDSession) -> some View {
+        Menu("Move to...") {
+            ForEach(folderViewModel.rootFolders) { folder in
+                FolderMenuItemForMetadata(
+                    folder: folder,
+                    folderViewModel: folderViewModel,
+                    sessionID: session.id
+                )
+            }
+        }
+
+        Menu("Labels") {
+            ForEach(folderViewModel.labels.sorted) { label in
+                Button(action: {
+                    folderViewModel.toggleLabel(label.id, for: session.id)
+                }) {
+                    HStack {
+                        Circle()
+                            .fill(Color(hex: label.color) ?? .gray)
+                            .frame(width: 8, height: 8)
+                        Text(label.name)
+                        if session.labelIDs.contains(label.id) {
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                }
+            }
+        }
+
+        Divider()
+
+        Button("Delete", role: .destructive) {
+            onDelete(session.id)
+            if selectedSessionID == session.id {
+                selectedSessionID = nil
             }
         }
     }
@@ -549,6 +603,23 @@ struct SessionsListView: View {
             return "Start a new session to record meetings or calls"
         }
         return "Move sessions here from the Inbox"
+    }
+
+    private func updateSearch(query: String) async {
+        await repository.setFilter(
+            folderID: folderViewModel.selectedFolderID,
+            labelID: folderViewModel.selectedLabelID,
+            searchQuery: query
+        )
+    }
+}
+
+// MARK: - Visibility Preference Key
+
+struct VisibleItemPreferenceKey: PreferenceKey {
+    static var defaultValue: [UUID?] = []
+    static func reduce(value: inout [UUID?], nextValue: () -> [UUID?]) {
+        value.append(contentsOf: nextValue())
     }
 }
 

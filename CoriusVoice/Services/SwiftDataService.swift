@@ -335,17 +335,20 @@ final class SwiftDataService {
     }
     
     func insertSession(_ session: RecordingSession) {
+        let startTime = Date()
         let sdSession = SDSession.from(session)
         modelContext.insert(sdSession)
         try? modelContext.save()
         
-        // Update search index with transcript content
+        // Update search index with transcript content (non-blocking)
         Task { @MainActor in
             do {
                 searchIndex.indexSession(sdSession, transcriptSegments: session.transcriptSegments)
-                logger.info("📝 Inserted session: \(session.id) and indexed \(session.transcriptSegments.count) transcript segments")
+                let duration = Date().timeIntervalSince(startTime)
+                logger.info("📝 Inserted session \(session.id) and indexed \(session.transcriptSegments.count) segments in \(String(format: "%.2f", duration))s")
             } catch {
-                logger.warning("⚠️ Failed to index session \(session.id): \(error.localizedDescription)")
+                logger.error("⚠️ Failed to index session \(session.id): \(error.localizedDescription)")
+                // Index failure doesn't block save operation - session is already stored
             }
         }
     }
@@ -379,7 +382,7 @@ final class SwiftDataService {
             // Update search index (debounced for rapid edits)
             Task { @MainActor in
                 searchIndex.updateSession(existing, transcriptSegments: session.transcriptSegments)
-                logger.debug("📝 Updated session: \(session.id) and queued index refresh")
+                logger.debug("📝 Updated session \(session.id) and queued debounced index refresh")
             }
         } else {
             insertSession(session)
@@ -387,14 +390,16 @@ final class SwiftDataService {
     }
     
     func deleteSession(id: UUID) {
+        let startTime = Date()
         if let session = getSession(id: id) {
             modelContext.delete(session)
             try? modelContext.save()
             
-            // Remove from search index
+            // Remove from search index (non-blocking)
             Task { @MainActor in
                 searchIndex.removeFromIndex(sessionID: id)
-                logger.info("🗑️ Deleted session: \(id) and removed from search index")
+                let duration = Date().timeIntervalSince(startTime)
+                logger.info("🗑️ Deleted session \(id) and removed from search index in \(String(format: "%.2f", duration))s")
             }
         }
     }
@@ -428,12 +433,14 @@ final class SwiftDataService {
         let deleteIDs = deleteCandidates.subtracting(keepIDs)
         guard !deleteIDs.isEmpty else { return 0 }
 
-        // Batch remove from search index for efficiency
+        // Batch remove from search index for efficiency (non-blocking)
         Task { @MainActor in
+            let batchStartTime = Date()
             for id in deleteIDs {
                 searchIndex.removeFromIndex(sessionID: id)
             }
-            logger.info("🗑️ Batch removed \(deleteIDs.count) sessions from search index")
+            let batchDuration = Date().timeIntervalSince(batchStartTime)
+            logger.info("🗑️ Batch removed \(deleteIDs.count) sessions from search index in \(String(format: "%.2f", batchDuration))s")
         }
 
         for id in deleteIDs {

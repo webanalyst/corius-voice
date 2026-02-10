@@ -10,7 +10,7 @@ private let searchIndex = TranscriptSearchIndex.shared
 
 // MARK: - SwiftData Service
 // Provides fast metadata access via SwiftData while keeping full data in JSON files
-// Integrated with versioned schema management for safe migrations
+// Integrated with versioned schema management and caching layers for optimal performance
 
 @MainActor
 final class SwiftDataService {
@@ -20,6 +20,13 @@ final class SwiftDataService {
     
     let modelContainer: ModelContainer
     let modelContext: ModelContext
+    
+    // MARK: - Cache and Index Services
+    
+    private let sessionIndex = SessionIndexService.shared
+    private let sessionCache = SessionCacheService.shared
+    private let queryCache = SessionQueryCache.shared
+    private let metrics = CacheMetrics.shared
     
     private init() {
         do {

@@ -31,6 +31,12 @@ class FolderTreeViewModel: ObservableObject {
 
     private let storage = StorageService.shared
     private var cancellables = Set<AnyCancellable>()
+    
+    // Cache services
+    private let sessionCache = SessionCacheService.shared
+    private let sessionIndex = SessionIndexService.shared
+    private let queryCache = SessionQueryCache.shared
+    private let metrics = CacheMetrics.shared
 
     // MARK: - Initialization
 

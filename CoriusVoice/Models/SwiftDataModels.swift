@@ -9,7 +9,7 @@ import SwiftData
 @Model
 final class SDSession {
     @Attribute(.unique) var id: UUID
-    var startDate: Date
+    @Attribute(.index) var startDate: Date
     var endDate: Date?
     var title: String?
     var sessionType: String  // meeting, note, call, etc.
@@ -28,7 +28,7 @@ final class SDSession {
     var hasSummary: Bool
     
     // Organization
-    var folderID: UUID?
+    @Attribute(.index) var folderID: UUID?
     var labelIDsData: Data?  // Encoded [UUID]
     var isClassified: Bool
     
@@ -252,7 +252,7 @@ final class SDWorkspaceItem {
 @Model
 final class SDFolder {
     @Attribute(.unique) var id: UUID
-    var name: String
+    @Attribute(.index) var name: String
     var parentID: UUID?
     var icon: String
     var color: String?
@@ -322,7 +322,7 @@ final class SDFolder {
 @Model
 final class SDLabel {
     @Attribute(.unique) var id: UUID
-    var name: String
+    @Attribute(.index) var name: String
     var color: String
     var icon: String?
     var createdAt: Date
@@ -372,7 +372,7 @@ final class SDLabel {
 @Model
 final class SDKnownSpeaker {
     @Attribute(.unique) var id: UUID
-    var name: String
+    @Attribute(.index) var name: String
     var color: String
     var notes: String?
     var voiceCharacteristics: String?

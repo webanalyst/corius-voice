@@ -2,6 +2,41 @@ import Foundation
 import SwiftData
 import os.log
 
+/// Lightweight metadata struct for list views - excludes transcript bodies
+struct SessionMetadata: Identifiable, Equatable {
+    let id: UUID
+    let title: String?
+    let startDate: Date
+    let endDate: Date?
+    let duration: TimeInterval
+    let speakerIDs: [UUID]
+    let labelIDs: [UUID]
+    let folderID: UUID?
+    let hasTranscript: Bool
+    let segmentCount: Int
+    let speakerCount: Int
+    let speakerNames: String
+    
+    init(from session: SDSession) {
+        self.id = session.id
+        self.title = session.title
+        self.startDate = session.startDate
+        self.endDate = session.endDate
+        self.duration = session.totalDuration
+        self.speakerIDs = []
+        self.labelIDs = session.labelIDs ?? []
+        self.folderID = session.folderID
+        self.hasTranscript = session.hasTranscript
+        self.segmentCount = session.segmentCount
+        self.speakerCount = session.speakerCount
+        self.speakerNames = session.speakerNames
+    }
+    
+    static func == (lhs: SessionMetadata, rhs: SessionMetadata) -> Bool {
+        lhs.id == rhs.id
+    }
+}
+
 /// Repository pattern wrapper over SwiftData providing paginated, faulted, and cached access
 @MainActor
 final class SessionRepository: ObservableObject {
@@ -10,6 +45,8 @@ final class SessionRepository: ObservableObject {
     private let logger = Logger(subsystem: "com.corius.voice", category: "SessionRepository")
     private let swiftData = SwiftDataService.shared
     private let searchIndex = TranscriptSearchIndex.shared
+    private let indexService = IndexService.shared
+    private let queryCache = SessionQueryCache.shared
 
     // MARK: - Pagination State
 
@@ -27,6 +64,7 @@ final class SessionRepository: ObservableObject {
     // MARK: - LRU Cache
 
     private var fullSessionCache: LRUCache<UUID, RecordingSession> = LRUCache(capacity: 20)
+    private var metadataCache: LRUCache<String, [SessionMetadata]> = LRUCache(capacity: 10)
 
     // MARK: - Performance Metrics
 

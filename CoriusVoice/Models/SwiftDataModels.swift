@@ -1,8 +1,26 @@
 import Foundation
 import SwiftData
+import os.log
 
 // MARK: - SwiftData Models for Fast Metadata Storage
 // Audio files and detailed transcripts remain as files in the sessions folder
+// Performance indexes: SDSession.startDate, SDSession.folderID, SDLabel.name, SDKnownSpeaker.name, SDFolder.name
+
+private let schemaLogger = Logger(subsystem: "com.corius.voice", category: "SchemaVersionManager")
+
+#if DEBUG
+private let schemaLogEnabled = true
+#else
+private let schemaLogEnabled = false
+#endif
+
+// Log index configuration on module load
+private func configureSchemaIndexes() {
+    guard schemaLogEnabled else { return }
+    schemaLogger.info("📊 SwiftData schema indexes configured: SDSession.startDate, SDSession.folderID, SDLabel.name, SDKnownSpeaker.name, SDFolder.name")
+}
+
+_ = configureSchemaIndexes()
 
 // MARK: - Session Entity (SwiftData)
 

@@ -2,44 +2,75 @@ import Foundation
 import SwiftData
 import os.log
 
-// MARK: - Schema Version Management
-
-/// Enum representing all schema versions in the migration path
-enum CoriusSchemaVersion: Int, CaseIterable {
-    case v1 = 1
-    // Future versions: v2, v3, etc.
-    
-    var schema: Schema {
-        switch self {
-        case .v1:
-            return CoriusSchemaV1.schema
-        }
-    }
-}
+private let logger = Logger(subsystem: "com.corius.voice", category: "SchemaVersionManager")
 
 // MARK: - V1 Schema (Baseline)
 
 /// V1 Schema - Captures the initial model state as baseline for future migrations
-enum CoriusSchemaV1 {
-    static let versionNumber = 1
-    static let currentSchema = Schema([
-        SDSession.self,
-        SDFolder.self,
-        SDLabel.self,
-        SDKnownSpeaker.self,
-        SDWorkspaceDatabase.self,
-        SDWorkspaceItem.self
-    ])
+enum CoriusSchemaV1: VersionedSchema {
+    static var versionIdentifier = Schema.Version(1, 0, 0)
+    
+    static var models: [any PersistentModel.Type] {
+        [
+            SDSession.self,
+            SDFolder.self,
+            SDLabel.self,
+            SDKnownSpeaker.self,
+            SDWorkspaceDatabase.self,
+            SDWorkspaceItem.self
+        ]
+    }
+}
+
+// MARK: - V2 Schema (Performance Optimization)
+
+/// V2 Schema - Adds performance indexes and search optimization fields
+enum CoriusSchemaV2: VersionedSchema {
+    static var versionIdentifier = Schema.Version(2, 0, 0)
+    
+    static var models: [any PersistentModel.Type] {
+        // Same models as V1, but with indexed fields added
+        [
+            SDSession.self,
+            SDFolder.self,
+            SDLabel.self,
+            SDKnownSpeaker.self,
+            SDWorkspaceDatabase.self,
+            SDWorkspaceItem.self
+        ]
+    }
 }
 
 // MARK: - Migration Plan
 
 /// Staged migration plan for evolving the SwiftData schema
-typealias CoriusSchemaMigrationPlan = SchemaMigrationPlan
+enum CoriusSchemaMigrationPlan: SchemaMigrationPlan {
+    static var schemas: [any VersionedSchema.Type] {
+        [CoriusSchemaV1.self, CoriusSchemaV2.self]
+    }
+    
+    static var stages: [MigrationStage] {
+        [
+            MigrationStage.migrate(from: CoriusSchemaV1.self, to: CoriusSchemaV2.self)
+        ]
+    }
+}
 
-enum CoriusMigrationStage: Int, CaseIterable {
-    case v1ToV2 = 1
-    // Future stages: v2ToV3, v3ToV4, etc.
+// MARK: - Schema Version Management
+
+/// Enum representing all schema versions in the migration path
+enum CoriusSchemaVersion: Int, CaseIterable {
+    case v1 = 1
+    case v2 = 2
+    
+    var versionIdentifier: Schema.Version {
+        switch self {
+        case .v1:
+            return CoriusSchemaV1.versionIdentifier
+        case .v2:
+            return CoriusSchemaV2.versionIdentifier
+        }
+    }
 }
 
 // MARK: - Schema Version Manager

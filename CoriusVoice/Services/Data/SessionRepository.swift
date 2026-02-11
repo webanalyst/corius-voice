@@ -132,6 +132,49 @@ final class SessionRepository: ObservableObject {
         return session
     }
 
+    /// Fetch session metadata only (excludes transcript bodies) for list view performance
+    func fetchSessionMetadata(page: Int, pageSize: Int) async -> [SessionMetadata] {
+        let startTime = CFAbsoluteTimeGetCurrent()
+        let offset = page * pageSize
+
+        logger.debug("📋 Fetching metadata page \(page) (offset: \(offset), limit: \(pageSize))")
+
+        // Check metadata cache first
+        let cacheKey = buildMetadataKey(folderID: currentFolderID, labelID: currentLabelID, page: page)
+        if let cached = metadataCache.get(cacheKey) {
+            logger.debug("💎 Metadata cache hit for page \(page)")
+            return cached
+        }
+
+        // Fetch sessions from SwiftData
+        let sessions: [SDSession]
+        if let folderID = currentFolderID {
+            sessions = fetchSessionsByFolder(folderID, offset: offset, limit: pageSize)
+        } else if let labelID = currentLabelID {
+            sessions = fetchSessionsByLabel(labelID, offset: offset, limit: pageSize)
+        } else {
+            sessions = fetchAllSessions(offset: offset, limit: pageSize)
+        }
+
+        // Convert to metadata (excludes transcript bodies)
+        let metadata = sessions.map { SessionMetadata(from: $0) }
+
+        // Cache the metadata
+        metadataCache.put(cacheKey, value: metadata)
+
+        // Register access pattern with query cache
+        queryCache.recordAccess(pattern: .listView(folderID: currentFolderID, labelID: currentLabelID))
+
+        let loadTime = (CFAbsoluteTimeGetCurrent() - startTime) * 1000
+        logger.info("✅ Metadata page \(page) loaded in \(String(format: "%.1f", loadTime))ms (\(metadata.count) sessions)")
+
+        if loadTime > 100 {
+            logger.warning("⚠️ Metadata fetch exceeded 100ms target: \(String(format: "%.1f", loadTime))ms")
+        }
+
+        return metadata
+    }
+
     /// Prefetch sessions for smooth scrolling
     func prefetchSessions(ids: [UUID]) {
         let uncachedIDs = ids.filter { fullSessionCache.get($0) == nil }

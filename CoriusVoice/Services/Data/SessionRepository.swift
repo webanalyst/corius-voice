@@ -46,7 +46,8 @@ final class SessionRepository: ObservableObject {
     private let swiftData = SwiftDataService.shared
     private let searchIndex = TranscriptSearchIndex.shared
     private let indexService = IndexService.shared
-    private let queryCache = SessionQueryCache.shared
+    private let queryCache = QueryCache()
+    private let metrics = CacheMetrics.shared
 
     // MARK: - Pagination State
 
@@ -164,10 +165,17 @@ final class SessionRepository: ObservableObject {
         metadataCache.put(cacheKey, value: metadata)
 
         // Register access pattern with IndexAndCacheService for cache warming
-        indexService.registerAccessPattern(.sessionList)
-
+        // Note: IndexService is for workspace items, sessions use direct cache
+        
         // Update query cache
-        queryCache.recordAccess(pattern: .listView(folderID: currentFolderID, labelID: currentLabelID))
+        let cacheKey = "metadata_\(currentFolderID?.uuidString ?? "nil")_\(currentLabelID?.uuidString ?? "nil")_\(page)"
+        if let cached = queryCache.getCache(key: cacheKey) as [SessionMetadata]? {
+            logger.debug("💎 Query cache hit for page \(page)")
+            return cached
+        }
+        
+        // Store in query cache
+        // Note: QueryCache generic type limitation, using inline cache for metadata
 
         let loadTime = (CFAbsoluteTimeGetCurrent() - startTime) * 1000
         logger.info("✅ Metadata page \(page) loaded in \(String(format: "%.1f", loadTime))ms (\(metadata.count) sessions)")
@@ -192,6 +200,62 @@ final class SessionRepository: ObservableObject {
                     }
                 }
             }
+        }
+    }
+
+    /// Batch prefetch transcript data for multiple sessions
+    /// Fetches in batches of 20 and populates LRU cache proactively
+    func prefetchTranscripts(for sessionIDs: [UUID]) async throws {
+        let startTime = CFAbsoluteTimeGetCurrent()
+        let batchSize = 20
+        let uncachedIDs = sessionIDs.filter { fullSessionCache.get($0) == nil }
+        
+        guard !uncachedIDs.isEmpty else {
+            logger.debug("💎 All sessions already cached for prefetch")
+            return
+        }
+        
+        logger.debug("📦 Prefetching \(uncachedIDs.count) transcripts in batches of \(batchSize)")
+        
+        var loadedCount = 0
+        var errorCount = 0
+        
+        // Process in batches
+        for batchStart in stride(from: 0, to: uncachedIDs.count, by: batchSize) {
+            let batchEnd = min(batchStart + batchSize, uncachedIDs.count)
+            let batch = Array(uncachedIDs[batchStart..<batchEnd])
+            
+            await withTaskGroup(of: (UUID, RecordingSession?).self) { group in
+                for sessionID in batch {
+                    group.addTask {
+                        if let session = await StorageService.shared.loadSession(id: sessionID) {
+                            return (sessionID, session)
+                        }
+                        return (sessionID, nil)
+                    }
+                }
+                
+                for await (sessionID, session) in group {
+                    if let session = session {
+                        await MainActor.run {
+                            fullSessionCache.put(sessionID, value: session)
+                        }
+                        loadedCount += 1
+                    } else {
+                        errorCount += 1
+                    }
+                }
+            }
+        }
+        
+        let loadTime = (CFAbsoluteTimeGetCurrent() - startTime) * 1000
+        logger.info("✅ Prefetch completed: \(loadedCount) loaded, \(errorCount) errors in \(String(format: "%.1f", loadTime))ms")
+        
+        // Update metrics
+        await metrics.recordPrefetch(count: loadedCount, duration: loadTime)
+        
+        if errorCount > 0 {
+            logger.warning("⚠️ Prefetch had \(errorCount) errors")
         }
     }
 

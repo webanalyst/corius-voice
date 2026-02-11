@@ -146,7 +146,8 @@ final class SessionRepository: ObservableObject {
             return cached
         }
 
-        // Fetch sessions from SwiftData
+        // Fetch sessions from SwiftData - explicitly excluding transcript relationships
+        // SwiftData faults prevent transcript loading unless explicitly accessed
         let sessions: [SDSession]
         if let folderID = currentFolderID {
             sessions = fetchSessionsByFolder(folderID, offset: offset, limit: pageSize)
@@ -156,13 +157,16 @@ final class SessionRepository: ObservableObject {
             sessions = fetchAllSessions(offset: offset, limit: pageSize)
         }
 
-        // Convert to metadata (excludes transcript bodies)
+        // Convert to metadata (excludes transcript bodies - SessionMetadata only captures scalar fields)
         let metadata = sessions.map { SessionMetadata(from: $0) }
 
         // Cache the metadata
         metadataCache.put(cacheKey, value: metadata)
 
-        // Register access pattern with query cache
+        // Register access pattern with IndexAndCacheService for cache warming
+        indexService.registerAccessPattern(.sessionList)
+
+        // Update query cache
         queryCache.recordAccess(pattern: .listView(folderID: currentFolderID, labelID: currentLabelID))
 
         let loadTime = (CFAbsoluteTimeGetCurrent() - startTime) * 1000

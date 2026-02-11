@@ -282,6 +282,63 @@ final class SwiftDataService {
     
     // MARK: - Session Operations (Fast Queries)
     
+    /// Fetch sessions with pagination and optional transcript inclusion
+    /// - Parameters:
+    ///   - folderID: Optional folder filter
+    ///   - labelID: Optional label filter
+    ///   - fetchLimit: Maximum number of sessions to return
+    ///   - fetchOffset: Number of sessions to skip
+    ///   - includeTranscript: Whether to include transcript bodies (default: false for performance)
+    /// - Returns: Array of SDSession objects
+    func fetchSessions(
+        folderID: UUID? = nil,
+        labelID: UUID? = nil,
+        fetchLimit: Int? = nil,
+        fetchOffset: Int = 0,
+        includeTranscript: Bool = false
+    ) -> [SDSession] {
+        let startTime = CFAbsoluteTimeGetCurrent()
+        
+        var descriptor = FetchDescriptor<SDSession>(
+            sortBy: [SortDescriptor(\.startDate, order: .reverse)]
+        )
+        
+        // Apply predicates based on filters
+        if let folderID = folderID {
+            if folderID == Folder.inboxID {
+                descriptor.predicate = #Predicate<SDSession> { $0.folderID == nil }
+            } else {
+                descriptor.predicate = #Predicate<SDSession> { $0.folderID == folderID }
+            }
+        } else if let labelID = labelID {
+            // For label filtering, we need to fetch all and filter in memory
+            // TODO: Optimize when SwiftData supports array contains predicates
+            let all = fetchAllSessions()
+            let filtered = all.filter { $0.labelIDs.contains(labelID) }
+            let start = filtered.index(filtered.startIndex, offsetBy: min(fetchOffset, filtered.count))
+            let end = filtered.index(filtered.startIndex, offsetBy: min(fetchOffset + (fetchLimit ?? filtered.count), filtered.count))
+            return Array(filtered[start..<end])
+        }
+        
+        descriptor.fetchOffset = fetchOffset
+        if let limit = fetchLimit {
+            descriptor.fetchLimit = limit
+        }
+        
+        let result = (try? modelContext.fetch(descriptor)) ?? []
+        
+        let queryTime = (CFAbsoluteTimeGetCurrent() - startTime) * 1000
+        if queryTime > 100 {
+            logger.warning("⚠️ fetchSessions exceeded 100ms: \(String(format: "%.1f", queryTime))ms")
+        }
+        
+        // Note: SwiftData uses faulting by default, so transcript bodies won't load
+        // unless explicitly accessed. The includeTranscript parameter is for documentation
+        // and future use when we implement manual fault control.
+        
+        return result
+    }
+    
     func fetchAllSessions() -> [SDSession] {
         let descriptor = FetchDescriptor<SDSession>(
             sortBy: [SortDescriptor(\.startDate, order: .reverse)]
@@ -298,18 +355,11 @@ final class SwiftDataService {
     }
     
     func fetchSessions(inFolder folderID: UUID) -> [SDSession] {
-        let predicate = #Predicate<SDSession> { $0.folderID == folderID }
-        let descriptor = FetchDescriptor<SDSession>(
-            predicate: predicate,
-            sortBy: [SortDescriptor(\.startDate, order: .reverse)]
-        )
-        return (try? modelContext.fetch(descriptor)) ?? []
+        return fetchSessions(folderID: folderID)
     }
     
     func fetchSessions(withLabel labelID: UUID) -> [SDSession] {
-        // Need to decode labelIDsData to check containment
-        let allSessions = fetchAllSessions()
-        return allSessions.filter { $0.labelIDs.contains(labelID) }
+        return fetchSessions(labelID: labelID)
     }
     
     func fetchUnclassifiedSessions() -> [SDSession] {

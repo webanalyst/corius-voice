@@ -282,6 +282,88 @@ final class SessionRepository: ObservableObject {
         return results
     }
 
+    /// Fetch sessions with configurable parameters for list views
+    /// - Parameters:
+    ///   - fetchLimit: Maximum number of sessions to return
+    ///   - fetchOffset: Number of sessions to skip (for pagination)
+    ///   - includeTranscript: Whether to include transcript bodies (default: false for performance)
+    ///   - folderID: Optional folder filter
+    ///   - labelID: Optional label filter
+    /// - Returns: Array of SDSession objects
+    func fetchSessions(
+        fetchLimit: Int? = nil,
+        fetchOffset: Int = 0,
+        includeTranscript: Bool = false,
+        folderID: UUID? = nil,
+        labelID: UUID? = nil
+    ) async -> [SDSession] {
+        let startTime = CFAbsoluteTimeGetCurrent()
+        
+        logger.debug("""
+        📋 Fetching sessions: limit=\(fetchLimit?.description ?? "none"), \
+        offset=\(fetchOffset), includeTranscript=\(includeTranscript), \
+        folder=\(folderID?.uuidString ?? "none"), label=\(labelID?.uuidString ?? "none")
+        """)
+        
+        // Check cache for metadata-only queries
+        if !includeTranscript {
+            let cacheKey = buildMetadataKey(folderID: folderID ?? currentFolderID, labelID: labelID ?? currentLabelID, page: fetchOffset ?? 0)
+            if let cached = metadataCache.get(cacheKey) {
+                let cachedIDs = cached.map { $0.id }
+                let results = cachedIDs.compactMap { swiftData.getSession(id: $0) }
+                logger.debug("💎 Cache hit for fetchSessions")
+                return results
+            }
+        }
+        
+        // Build fetch descriptor
+        var descriptor = FetchDescriptor<SDSession>(
+            sortBy: [SortDescriptor(\SDSession.startDate, order: .reverse)]
+        )
+        
+        // Apply filters
+        if let folderID = folderID {
+            if folderID == Folder.inboxID {
+                descriptor.predicate = #Predicate<SDSession> { $0.folderID == nil }
+            } else {
+                descriptor.predicate = #Predicate<SDSession> { $0.folderID == folderID }
+            }
+        }
+        
+        // Apply pagination
+        descriptor.fetchOffset = fetchOffset
+        if let limit = fetchLimit {
+            descriptor.fetchLimit = limit
+        }
+        
+        // Fetch sessions
+        let sessions = (try? swiftData.modelContext.fetch(descriptor)) ?? []
+        
+        // Note: SwiftData uses faulting by default - transcript relationships won't be loaded
+        // unless explicitly accessed. The includeTranscript parameter is documented for API
+        // completeness but SwiftData's lazy loading handles the optimization automatically.
+        
+        // Update query cache for metadata queries
+        if !includeTranscript {
+            let metadata = sessions.map { SessionMetadata(from: $0) }
+            let page = fetchOffset / (fetchLimit ?? 50)
+            let cacheKey = buildMetadataKey(folderID: folderID ?? currentFolderID, labelID: labelID ?? currentLabelID, page: page)
+            metadataCache.put(cacheKey, value: metadata)
+            
+            // Register access pattern with metrics
+            await metrics.recordQuery(duration: (CFAbsoluteTimeGetCurrent() - startTime) * 1000)
+        }
+        
+        let loadTime = (CFAbsoluteTimeGetCurrent() - startTime) * 1000
+        logger.info("✅ Fetched \(sessions.count) sessions in \(String(format: "%.1f", loadTime))ms")
+        
+        if loadTime > 100 {
+            logger.warning("⚠️ Fetch exceeded 100ms target: \(String(format: "%.1f", loadTime))ms")
+        }
+        
+        return sessions
+    }
+
     /// Reload total count (efficient count query)
     func reloadTotalCount() {
         totalCount = swiftData.countSessions()

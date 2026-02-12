@@ -507,7 +507,7 @@ final class SwiftDataService {
         Task { @MainActor in
             let batchStartTime = Date()
             for id in deleteIDs {
-                searchIndex.removeFromIndex(sessionID: id)
+                await TranscriptSearchIndex.shared.removeTranscript(for: id)
             }
             let batchDuration = Date().timeIntervalSince(batchStartTime)
             logger.info("🗑️ Batch removed \(deleteIDs.count) sessions from search index in \(String(format: "%.2f", batchDuration))s")

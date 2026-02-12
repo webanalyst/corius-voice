@@ -25,16 +25,29 @@ enum CoriusSchemaV1: VersionedSchema {
 // MARK: - V2 Schema (Performance Optimization)
 
 /// V2 Schema - Adds performance indexes and search optimization fields
+///
+/// V2 Enhancements:
+/// - Single-field indexes: SDSession.startDate, SDSession.folderID, SDLabel.name, SDKnownSpeaker.name, SDFolder.name
+/// - Compound indexes (simulated via denormalized string fields):
+///   - SDSession.startDate_folderID for folder-filtered chronological queries
+///   - SDSession.folderID_primaryLabelID for folder+label filtering
+///   - SDSession.speakerID_startDate for speaker-specific chronological views
+///   - SDLabel.name_color for label lookup with color sorting
+/// - Search optimization: SDSession.searchableText, SDSession.speakerNames
+///
+/// Migration: V1 → V2 is a lightweight migration (no data transformation required)
+/// Indexes are added automatically and populated during schema upgrade
 enum CoriusSchemaV2: VersionedSchema {
     static var versionIdentifier = Schema.Version(2, 0, 0)
     
     static var models: [any PersistentModel.Type] {
-        // Same models as V1, but with indexed fields added
+        // Same models as V1, but with indexed fields added via @Attribute(.index)
+        // Compound indexes are simulated via denormalized string properties
         [
-            SDSession.self,
-            SDFolder.self,
-            SDLabel.self,
-            SDKnownSpeaker.self,
+            SDSession.self,      // Added: startDate_folderID, folderID_primaryLabelID, speakerID_startDate
+            SDFolder.self,       // Added: name index
+            SDLabel.self,        // Added: name_color compound index
+            SDKnownSpeaker.self, // Added: name index
             SDWorkspaceDatabase.self,
             SDWorkspaceItem.self
         ]

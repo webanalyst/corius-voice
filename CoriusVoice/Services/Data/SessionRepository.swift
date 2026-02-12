@@ -118,11 +118,13 @@ final class SessionRepository: ObservableObject {
         // Check cache first
         if let cached = fullSessionCache.get(id) {
             logger.debug("💎 Cache hit for session \(id)")
+            Task { await metrics.recordSessionCache(hit: true) }
             return cached
         }
 
         // Load from storage
         logger.debug("📂 Loading full session \(id) from storage")
+        Task { await metrics.recordSessionCache(hit: false) }
         let session = StorageService.shared.loadSession(id: id)
 
         // Update cache

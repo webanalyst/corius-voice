@@ -439,6 +439,8 @@ struct SessionsListView: View {
     @State private var searchDebouncer = Debouncer(delay: 0.3)
     @State private var visibleSessions: Set<UUID> = []
     @State private var scrollOffset: CGFloat = 0
+    @State private var renderStartTime: CFAbsoluteTime?
+    @State private var lastMemoryWarning: CFAbsoluteTime = 0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -518,6 +520,12 @@ struct SessionsListView: View {
                                 }
                             )
                             .onAppear {
+                                // Track render time
+                                let renderTime = renderStartTime.map { CFAbsoluteTimeGetCurrent() - $0 } ?? 0
+                                if renderTime > 0.1 {
+                                    os_log("⚠️ SessionsView render time: %.1fms", type: .info, renderTime * 1000)
+                                }
+
                                 visibleSessions.insert(session.id)
                                 
                                 // Load next page if approaching end (last 10 items)
@@ -572,11 +580,22 @@ struct SessionsListView: View {
             }
         }
         .onAppear {
+            renderStartTime = CFAbsoluteTimeGetCurrent()
             Task {
                 let startTime = CFAbsoluteTimeGetCurrent()
                 await repository.loadFirstPage()
                 let loadTime = (CFAbsoluteTimeGetCurrent() - startTime) * 1000
                 os_log("📊 SessionsView initial load: %.1fms", type: .info, loadTime)
+
+                // Warn if exceeds 100ms target
+                if loadTime > 100 {
+                    os_log("⚠️ SessionsView initial load exceeded 100ms target: %.1fms", type: .warning, loadTime)
+                }
+
+                // Log memory usage for large datasets
+                if repository.totalCount >= 1000 {
+                    logMemoryUsage()
+                }
             }
         }
         .onChange(of: folderViewModel.selectedFolderID) { _, newID in
@@ -595,6 +614,30 @@ struct SessionsListView: View {
                     labelID: newID,
                     searchQuery: searchText
                 )
+            }
+        }
+    }
+
+    /// Log current memory usage for performance monitoring
+    private func logMemoryUsage() {
+        let now = CFAbsoluteTimeGetCurrent()
+        guard now - lastMemoryWarning > 60 else { return } // Once per minute max
+        lastMemoryWarning = now
+
+        let info = mach_task_basic_info()
+        var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size)/4
+        let result = withUnsafeMutablePointer(to: &info) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: 1) {
+                task_info(mach_task_self_, task_flavor_t(MACH_TASK_BASIC_INFO), $0, &count)
+            }
+        }
+
+        if result == KERN_SUCCESS {
+            let usedMB = Double(info.resident_size) / 1024 / 1024
+            os_log("💾 Memory usage: %.1f MB with %d sessions loaded", type: .info, usedMB, repository.sessions.count)
+
+            if usedMB > 500 {
+                os_log("⚠️ High memory usage detected: %.1f MB", type: .warning, usedMB)
             }
         }
     }

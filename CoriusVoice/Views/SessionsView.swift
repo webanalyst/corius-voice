@@ -410,6 +410,21 @@ struct SessionsView: View {
             }
         )
     }
+
+    /// Delete a session from both JSON storage and SwiftData
+    private func deleteSession(_ id: UUID) {
+        // Delete from JSON storage
+        StorageService.shared.deleteSession(id)
+        // Delete from SwiftData
+        SwiftDataService.shared.deleteSession(id: id)
+        // Clear from repository cache
+        sessionRepository.clearSession(id: id)
+        // Deselect if this was the selected session
+        if selectedSessionID == id {
+            selectedSessionID = nil
+            selectedSession = nil
+        }
+    }
 }
 
 // MARK: - Sessions List View (Lazy Loading)

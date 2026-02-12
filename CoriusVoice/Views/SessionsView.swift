@@ -77,8 +77,8 @@ struct ResizableDivider: View {
 struct SessionsView: View {
     @EnvironmentObject var appState: AppState
     @StateObject private var folderViewModel = FolderTreeViewModel()
-    @StateObject private var viewModel = SessionsViewModel()
     @StateObject private var sessionRepository = SessionRepository.shared
+    @State private var selectedSessionID: UUID?
     @State private var selectedSession: RecordingSession?
     @State private var showingNewSession = false
     @State private var showingImporter = false
@@ -90,7 +90,6 @@ struct SessionsView: View {
     @State private var showingImportOrphansResult = false
     @State private var dedupeMessage: String?
     @State private var showingDedupeResult = false
-    @State private var filteredSessions: [SDSession] = []
 
     // Resizable column widths
     @State private var folderColumnWidth: CGFloat = 220
@@ -145,7 +144,7 @@ struct SessionsView: View {
             switch result {
             case .success(let urls):
                 if let url = urls.first {
-                    viewModel.importAudioFile(from: url) { importedSession, error in
+                    importAudioFile(from: url) { importedSession, error in
                         if let error = error {
                             importError = error
                             showingImportError = true
@@ -238,8 +237,9 @@ struct SessionsView: View {
                 SessionsListView(
                     repository: sessionRepository,
                     selectedSessionID: Binding(
-                        get: { selectedSession?.id },
+                        get: { selectedSessionID },
                         set: { newID in
+                            selectedSessionID = newID
                             if let id = newID {
                                 // Load full session from repository cache when selected
                                 if let fullSession = sessionRepository.getFullSession(id: id) {
@@ -254,7 +254,7 @@ struct SessionsView: View {
                     ),
                     searchText: $searchText,
                     onDelete: { id in
-                        viewModel.deleteSession(id)
+                        deleteSession(id)
                         Task { @MainActor in
                             folderViewModel.reloadSessions()
                             sessionRepository.reloadTotalCount()
@@ -400,8 +400,8 @@ struct SessionsView: View {
             },
             set: { newValue in
                 DispatchQueue.main.async {
-                    // First save to storage
-                    viewModel.updateSession(newValue)
+                    // Save to SwiftData via repository
+                    SwiftDataService.shared.updateSession(newValue)
                     // Update our local selection
                     selectedSession = newValue
                     // Update the cache in folderViewModel

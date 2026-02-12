@@ -455,6 +455,14 @@ final class SessionRepository: ObservableObject {
     func updateCache(_ session: RecordingSession) {
         fullSessionCache.put(session.id, value: session)
     }
+
+    /// Remove a session from cache after deletion
+    func clearSession(id: UUID) {
+        fullSessionCache.removeValue(forKey: id)
+        // Also remove from sessions array if present
+        sessions.removeAll { $0.id == id }
+        logger.debug("🧹 Cleared session \(id) from cache")
+    }
 }
 
 // MARK: - LRU Cache

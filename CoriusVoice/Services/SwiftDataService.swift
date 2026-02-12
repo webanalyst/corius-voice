@@ -5,8 +5,8 @@ import os.log
 import AppKit
 #endif
 
-// Transcript search index for fast full-text search
-private let searchIndex = TranscriptSearchIndex.shared
+// Transcript search index for fast full-text search (accessed via shared singleton)
+// Note: Incremental index updates are now called via TranscriptSearchIndex.shared
 
 // MARK: - SwiftData Service
 // Provides fast metadata access via SwiftData while keeping full data in JSON files
@@ -397,15 +397,20 @@ final class SwiftDataService {
         modelContext.insert(sdSession)
         try? modelContext.save()
         
-        // Update search index with transcript content (non-blocking)
-        Task { @MainActor in
-            do {
-                searchIndex.indexSession(sdSession, transcriptSegments: session.transcriptSegments)
-                let duration = Date().timeIntervalSince(startTime)
-                logger.info("📝 Inserted session \(session.id) and indexed \(session.transcriptSegments.count) segments in \(String(format: "%.2f", duration))s")
-            } catch {
-                logger.error("⚠️ Failed to index session \(session.id): \(error.localizedDescription)")
-                // Index failure doesn't block save operation - session is already stored
+        // Incremental index update (non-blocking, uses new async API)
+        Task.detached(priority: .utility) {
+            await TranscriptSearchIndex.shared.indexTranscript(
+                for: session.id,
+                segments: session.transcriptSegments
+            )
+            
+            let duration = Date().timeIntervalSince(startTime)
+            await MainActor.run {
+                if duration > 0.05 {
+                    self.logger.warning("⚠️ Session insert + indexing took \(String(format: "%.0f", duration * 1000))ms")
+                } else {
+                    self.logger.debug("📝 Inserted session \(session.id) in \(String(format: "%.2f", duration))s")
+                }
             }
         }
     }
@@ -436,10 +441,15 @@ final class SwiftDataService {
             
             try? modelContext.save()
             
-            // Update search index (debounced for rapid edits)
-            Task { @MainActor in
-                searchIndex.updateSession(existing, transcriptSegments: session.transcriptSegments)
-                logger.debug("📝 Updated session \(session.id) and queued debounced index refresh")
+            // Incremental index update with debouncing (non-blocking, uses new async API)
+            Task.detached(priority: .utility) {
+                await TranscriptSearchIndex.shared.updateTranscript(
+                    for: session.id,
+                    segments: session.transcriptSegments
+                )
+                await MainActor.run {
+                    self.logger.debug("📝 Updated session \(session.id) and queued debounced index refresh")
+                }
             }
         } else {
             insertSession(session)
@@ -452,11 +462,14 @@ final class SwiftDataService {
             modelContext.delete(session)
             try? modelContext.save()
             
-            // Remove from search index (non-blocking)
-            Task { @MainActor in
-                searchIndex.removeFromIndex(sessionID: id)
+            // Remove from search index before deletion (non-blocking, uses new async API)
+            Task.detached(priority: .utility) {
+                await TranscriptSearchIndex.shared.removeTranscript(for: id)
+                
                 let duration = Date().timeIntervalSince(startTime)
-                logger.info("🗑️ Deleted session \(id) and removed from search index in \(String(format: "%.2f", duration))s")
+                await MainActor.run {
+                    self.logger.info("🗑️ Deleted session \(id) and removed from search index in \(String(format: "%.2f", duration))s")
+                }
             }
         }
     }

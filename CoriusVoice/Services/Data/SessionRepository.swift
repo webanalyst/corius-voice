@@ -445,6 +445,13 @@ final class SessionRepository: ObservableObject {
         return Array(all[start..<end])
     }
 
+    /// Build consistent cache key for metadata queries
+    private func buildMetadataKey(folderID: UUID?, labelID: UUID?, page: Int) -> String {
+        let folderStr = folderID?.uuidString ?? "nil"
+        let labelStr = labelID?.uuidString ?? "nil"
+        return "metadata_\(folderStr)_\(labelStr)_\(page)"
+    }
+
     // MARK: - Cache Management
 
     func clearCache() {

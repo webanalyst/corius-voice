@@ -442,7 +442,7 @@ final class SessionRepository: ObservableObject {
         let all = swiftData.fetchSessions(withLabel: labelID)
         let start = all.index(all.startIndex, offsetBy: min(offset, all.count))
         let end = all.index(all.startIndex, offsetBy: min(offset + limit, all.count))
-        return Array(all[start..<end]))
+        return Array(all[start..<end])
     }
 
     // MARK: - Cache Management

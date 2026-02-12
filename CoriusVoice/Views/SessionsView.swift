@@ -423,6 +423,7 @@ struct SessionsListView: View {
 
     @State private var searchDebouncer = Debouncer(delay: 0.3)
     @State private var visibleSessions: Set<UUID> = []
+    @State private var scrollOffset: CGFloat = 0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -431,6 +432,11 @@ struct SessionsListView: View {
                 Text(headerTitle)
                     .font(.headline)
                 Spacer()
+                if repository.isLoading {
+                    ProgressView()
+                        .scaleEffect(0.7)
+                        .frame(width: 16, height: 16)
+                }
                 Text("\(repository.totalCount)")
                     .font(.caption)
                     .foregroundColor(.secondary)
@@ -482,7 +488,7 @@ struct SessionsListView: View {
             } else {
                 ScrollView {
                     LazyVStack(spacing: 0) {
-                        ForEach(repository.sessions, id: \.id) { session in
+                        ForEach(Array(repository.sessions.enumerated()), id: \.element.id) { index, session in
                             SessionRowFromMetadata(
                                 session: session,
                                 folderViewModel: folderViewModel
@@ -491,17 +497,28 @@ struct SessionsListView: View {
                             .background(
                                 GeometryReader { geo in
                                     Color.clear.preference(
-                                        key: VisibleItemPreferenceKey.self,
-                                        value: [geo.frame(in: .named("scroll")).minY < 500 ? session.id : nil]
+                                        key: ScrollOffsetPreferenceKey.self,
+                                        value: geo.frame(in: .named("scroll")).minY
                                     )
                                 }
                             )
                             .onAppear {
                                 visibleSessions.insert(session.id)
-                                // Load next page if approaching end
-                                if session.id == repository.sessions.last?.id {
+                                
+                                // Load next page if approaching end (last 10 items)
+                                if index >= repository.sessions.count - 10 {
                                     Task {
                                         await repository.loadNextPage()
+                                    }
+                                }
+                                
+                                // Prefetch transcripts for upcoming items (10-item preload threshold)
+                                if index >= 10 {
+                                    let prefetchStart = max(0, index - 10)
+                                    let prefetchEnd = min(index + 10, repository.sessions.count)
+                                    let upcomingSessions = Array(repository.sessions[prefetchStart..<prefetchEnd]).map { $0.id }
+                                    Task {
+                                        await repository.prefetchTranscripts(for: upcomingSessions)
                                     }
                                 }
                             }
@@ -514,18 +531,55 @@ struct SessionsListView: View {
                         }
 
                         // Loading indicator at bottom
-                        if repository.isLoading {
+                        if repository.isLoading && repository.hasMorePages {
                             ProgressView()
+                                .padding()
+                        }
+                        
+                        // End of list indicator
+                        if !repository.hasMorePages && !repository.sessions.isEmpty {
+                            Text("All sessions loaded")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
                                 .padding()
                         }
                     }
                 }
                 .coordinateSpace(name: "scroll")
+                .background(
+                    GeometryReader { geo in
+                        Color.clear.preference(
+                            key: ScrollOffsetPreferenceKey.self,
+                            value: -geo.frame(in: .named("scroll")).minY
+                        )
+                    }
+                )
             }
         }
         .onAppear {
             Task {
+                let startTime = CFAbsoluteTimeGetCurrent()
                 await repository.loadFirstPage()
+                let loadTime = (CFAbsoluteTimeGetCurrent() - startTime) * 1000
+                os_log("📊 SessionsView initial load: %.1fms", type: .info, loadTime)
+            }
+        }
+        .onChange(of: folderViewModel.selectedFolderID) { _, newID in
+            Task {
+                await repository.setFilter(
+                    folderID: newID,
+                    labelID: folderViewModel.selectedLabelID,
+                    searchQuery: searchText
+                )
+            }
+        }
+        .onChange(of: folderViewModel.selectedLabelID) { _, newID in
+            Task {
+                await repository.setFilter(
+                    folderID: folderViewModel.selectedFolderID,
+                    labelID: newID,
+                    searchQuery: searchText
+                )
             }
         }
     }

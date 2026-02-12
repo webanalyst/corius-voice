@@ -17,7 +17,14 @@ private let schemaLogEnabled = false
 // Log index configuration on module load
 private func configureSchemaIndexes() {
     guard schemaLogEnabled else { return }
-    schemaLogger.info("📊 SwiftData schema indexes configured: SDSession.startDate, SDSession.folderID, SDLabel.name, SDKnownSpeaker.name, SDFolder.name")
+    schemaLogger.info("""
+    📊 SwiftData schema indexes configured:
+    Single-field: SDSession.startDate, SDSession.folderID, SDLabel.name, SDKnownSpeaker.name, SDFolder.name
+    Compound (simulated via denormalization):
+      - SDSession: startDate_folderID, folderID_primaryLabelID, speakerID_startDate
+      - TranscriptSegment access: via session.fileStorage + timestamp indexing
+      - SDLabel: name_color
+    """)
 }
 
 _ = configureSchemaIndexes()
@@ -57,6 +64,15 @@ final class SDSession {
     // Search optimization
     var searchableText: String  // First 1000 chars of transcript for quick search
     var speakerNames: String  // Comma-separated speaker names
+    
+    // MARK: - Compound Index Simulation (Denormalized Fields)
+    // SwiftData currently only supports single-field @Attribute(.index)
+    // These denormalized properties simulate compound indexes for multi-field queries
+    // Format: "value1|value2" for efficient prefix matching and sorting
+    
+    @Attribute(.index) var startDate_folderID: String  // "1735689600.0|uuid-string" for folder-filtered chronological queries
+    @Attribute(.index) var folderID_primaryLabelID: String?  // "uuid-string|uuid-string" for folder+label filtering
+    @Attribute(.index) var speakerID_startDate: String?  // "123|1735689600.0" for speaker-specific chronological views (speakerID is Int from Speaker.id)
     
     // Timestamps
     var createdAt: Date
@@ -106,8 +122,34 @@ final class SDSession {
         self.aiClassificationConfidence = aiClassificationConfidence
         self.searchableText = searchableText
         self.speakerNames = speakerNames
+        
+        // Initialize compound index fields
+        self.startDate_folderID = "\(startDate.timeIntervalSince1970)|\(folderID?.uuidString ?? "")"
+        self.folderID_primaryLabelID = folderID.map { "\($0.uuidString)|\(labelIDs.first?.uuidString ?? "")" }
+        // speakerID_startDate is set via updateSpeakerCompoundIndex() when speaker info is available
+        self.speakerID_startDate = nil
+        
         self.createdAt = Date()
         self.updatedAt = Date()
+    }
+    
+    // MARK: - Compound Index Maintenance
+    
+    /// Updates compound index fields when related data changes
+    func updateCompoundIndexes() {
+        // Update startDate_folderID
+        startDate_folderID = "\(startDate.timeIntervalSince1970)|\(folderID?.uuidString ?? "")"
+        
+        // Update folderID_primaryLabelID
+        folderID_primaryLabelID = folderID.map { "\($0.uuidString)|\(labelIDs.first?.uuidString ?? "")" }
+        
+        // speakerID_startDate should be updated when speaker information changes
+        // This is typically called after session initialization with speaker data
+    }
+    
+    /// Updates the speaker-based compound index when speaker information is available
+    func updateSpeakerCompoundIndex(speakerID: Int) {
+        speakerID_startDate = "\(speakerID)|\(startDate.timeIntervalSince1970)"
     }
     
     // MARK: - Label IDs Helper
@@ -346,6 +388,10 @@ final class SDLabel {
     var createdAt: Date
     var sortOrder: Int
     
+    // MARK: - Compound Index Simulation
+    // Simulates (name, color) compound index for label lookup with color sorting
+    @Attribute(.index) var name_color: String  // "LabelName|#3B82F6"
+    
     init(
         id: UUID = UUID(),
         name: String,
@@ -360,10 +406,13 @@ final class SDLabel {
         self.icon = icon
         self.createdAt = createdAt
         self.sortOrder = sortOrder
+        
+        // Initialize compound index
+        name_color = "\(name)|\(color)"
     }
     
     static func from(_ label: SessionLabel) -> SDLabel {
-        SDLabel(
+        let sdLabel = SDLabel(
             id: label.id,
             name: label.name,
             color: label.color,
@@ -371,6 +420,8 @@ final class SDLabel {
             createdAt: label.createdAt,
             sortOrder: label.sortOrder
         )
+        // Compound index is auto-initialized in init
+        return sdLabel
     }
     
     func toLabel() -> SessionLabel {
@@ -480,3 +531,42 @@ extension SDWorkspaceItem {
         )
     }
 }
+
+// MARK: - Compound Index Implementation Notes
+//
+// COMPOUND INDEX STRATEGY:
+// SwiftData's @Attribute(.index) currently only supports single-field indexing.
+// To optimize multi-field queries, we simulate compound indexes using denormalized
+// string fields with pipe-delimited values: "value1|value2"
+//
+// BENEFITS:
+// - Enables efficient prefix matching for filtered queries
+// - Reduces query complexity by avoiding multiple single-field lookups
+// - Maintains compatibility with SwiftData's current indexing limitations
+//
+// QUERY PATTERNS OPTIMIZED:
+// 1. Folder-filtered chronological queries (SessionListView):
+//    - Use: startDate_folderID = "\(timestamp)|\(folderID)"
+//    - Enables: "Show me sessions from folder X, sorted by date"
+//
+// 2. Folder + Label filtering (Advanced search):
+//    - Use: folderID_primaryLabelID = "\(folderID)|\(labelID)"
+//    - Enables: "Show me sessions from folder X with label Y"
+//
+// 3. Speaker-specific chronological views (SpeakerDetailView):
+//    - Use: speakerID_startDate = "\(speakerID)|\(timestamp)"
+//    - Enables: "Show me sessions where speaker 123 participated, sorted by date"
+//
+// 4. Label lookup with color sorting (Label management):
+//    - Use: name_color = "\(name)|\(color)"
+//    - Enables: "Find labels by name, grouped by color"
+//
+// FUTURE MIGRATION:
+// When SwiftData supports native compound indexes (@Attribute(.index) on tuples),
+// migrate these denormalized fields to proper compound indexes.
+// The denormalized fields can be deprecated in V3 schema with lightweight migration.
+//
+// MAINTENANCE REQUIREMENTS:
+// - Call updateCompoundIndexes() after modifying startDate, folderID, labelIDs
+// - Call updateSpeakerCompoundIndex(speakerID:) when speaker info becomes available
+// - Indexes are automatically initialized in init() methods

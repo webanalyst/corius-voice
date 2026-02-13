@@ -189,26 +189,42 @@ struct SessionsView: View {
                 )
         }
         .onAppear {
-            // Data loads from cache in ViewModel init, so this is rarely needed
-            // Only load if somehow the cache was empty
+            // Load folder/label data from cache
             if !folderViewModel.hasLoadedOnce {
                 folderViewModel.loadData()
+            }
+            
+            // Initialize SessionRepository with current filter state
+            Task { @MainActor in
+                let startTime = CFAbsoluteTimeGetCurrent()
+                await sessionRepository.loadFirstPage()
+                let loadTime = (CFAbsoluteTimeGetCurrent() - startTime) * 1000
+                os_log("📊 SessionsView repository init: %.1fms", type: .info, loadTime)
+                
+                if loadTime > 100 {
+                    os_log("⚠️ SessionsView init exceeded 100ms target: %.1fms", type: .warning, loadTime)
+                }
             }
         }
         .onChange(of: showingNewSession) { _, isShowing in
             // Reload sessions when the recording sheet is dismissed
             if !isShowing {
                 Task { @MainActor in
+                    // Reload repository to get new session
+                    await sessionRepository.loadFirstPage()
                     folderViewModel.reloadSessions()
-                    // Select the most recent session if available (use metadata for fast lookup)
-                    if let mostRecent = folderViewModel.sessionMetadata.sorted(by: { $0.startDate > $1.startDate }).first {
-                        selectedSession = folderViewModel.loadFullSession(id: mostRecent.id)
+                    
+                    // Select the most recent session if available
+                    if let mostRecent = sessionRepository.sessions.first {
+                        selectedSession = sessionRepository.getFullSession(id: mostRecent.id)
+                        selectedSessionID = mostRecent.id
                     }
                 }
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .recordingDidFinish)) { _ in
             Task { @MainActor in
+                await sessionRepository.loadFirstPage()
                 folderViewModel.reloadSessions()
             }
         }

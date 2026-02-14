@@ -103,6 +103,8 @@
 		A20000000000000000000014 /* LoadTestHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000013 /* LoadTestHelper.swift */; };
 		A20000000000000000000016 /* ViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000015 /* ViewModelTests.swift */; };
 		A20000000000000000000018 /* IntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000017 /* IntegrationTests.swift */; };
+		A20000000000000000000022 /* DashboardViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000023 /* DashboardViewModel.swift */; };
+		A20000000000000000000024 /* DashboardComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000025 /* DashboardComponents.swift */; };
 		B2000000201CE000009B1003 /* CoriusVoiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000000201CE000009B1001 /* CoriusVoiceTests.swift */; };
 		ED95134531FDC506C0CBE1E9 /* TemplateService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1AFA26B622628BF02256B87 /* TemplateService.swift */; };
 		EE65350623814956D3B4085F /* LinkedDatabase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 555FF98FC0FE5D6201B4023B /* LinkedDatabase.swift */; };
@@ -217,6 +219,8 @@
 		A20000000000000000000013 /* LoadTestHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoadTestHelper.swift; sourceTree = "<group>"; };
 		A20000000000000000000015 /* ViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewModelTests.swift; sourceTree = "<group>"; };
 		A20000000000000000000017 /* IntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntegrationTests.swift; sourceTree = "<group>"; };
+		A20000000000000000000023 /* DashboardViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardViewModel.swift; sourceTree = "<group>"; };
+		A20000000000000000000025 /* DashboardComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardComponents.swift; sourceTree = "<group>"; };
 		B1AFA26B622628BF02256B87 /* TemplateService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TemplateService.swift; sourceTree = "<group>"; };
 		B2000000201CE000009B1001 /* CoriusVoiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoriusVoiceTests.swift; sourceTree = "<group>"; };
 		B2000000201CE000009B1002 /* CoriusVoiceTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CoriusVoiceTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -359,6 +363,7 @@
 				A1000050201CE000009B0001 /* SpeakerSessionsTab.swift */,
 				A1000051201CE000009B0001 /* SpeakerTrainingTab.swift */,
 				A1000052201CE000009B0001 /* SpeakerChatView.swift */,
+				A20000000000000000000025 /* DashboardComponents.swift */,
 				A1000066201CE000009BFFF0 /* Workspace */,
 			);
 			path = Views;
@@ -389,6 +394,7 @@
 				A2000000000000000000000B /* WorkspaceViewModel.swift */,
 				A2000000000000000000000D /* SimplePageViewModel.swift */,
 				A2000000000000000000000F /* KanbanBoardViewModel.swift */,
+				A20000000000000000000023 /* DashboardViewModel.swift */,
 			);
 			path = ViewModels;
 			sourceTree = "<group>";
@@ -650,6 +656,8 @@
 				A2000000000000000000000C /* WorkspaceViewModel.swift in Sources */,
 				A2000000000000000000000E /* SimplePageViewModel.swift in Sources */,
 				A20000000000000000000010 /* KanbanBoardViewModel.swift in Sources */,
+				A20000000000000000000022 /* DashboardViewModel.swift in Sources */,
+				A20000000000000000000024 /* DashboardComponents.swift in Sources */,
 				02F0C57C7EE5616AAB2D13DA /* WebMDecoder.swift in Sources */,
 				972DF56220031D323AE0487D /* PageComment.swift in Sources */,
 				888FE71CFE6DA3C59BCA851D /* Template.swift in Sources */,

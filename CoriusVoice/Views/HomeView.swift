@@ -2,16 +2,50 @@ import SwiftUI
 
 struct HomeView: View {
     @EnvironmentObject var appState: AppState
+    @StateObject private var viewModel = DashboardViewModel()
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            header
-            quickActions
-            emptyState
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                header
+                
+                // Top Stats Row
+                StatsGrid(viewModel: viewModel)
+                
+                // Quick Actions
+                quickActions
+                
+                // Analytics Section
+                VStack(spacing: 16) {
+                    StreakCard(currentStreak: viewModel.currentStreak, longestStreak: viewModel.longestStreak)
+                    
+                    PersonalRecordsCard(
+                        bestWPM: viewModel.bestWPM,
+                        mostWords: viewModel.mostWordsInDay,
+                        longestSession: viewModel.longestSessionDuration
+                    )
+                    
+                    DailyGoalCard(
+                        current: viewModel.dailyWordCount,
+                        target: viewModel.dailyWordGoal,
+                        title: "DAILY GOAL PROGRESS",
+                        color: .yellow
+                    )
+                    
+                    ActivityHeatmap(data: viewModel.activityHeatmap)
+                    
+                    HourlyActivityChart(data: viewModel.hourlyActivity)
+                    
+                    WordsOverTimeChart(data: viewModel.wordsOverTime)
+                }
+            }
+            .padding(24)
         }
-        .padding(24)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Color(NSColor.windowBackgroundColor))
+        .onAppear {
+            viewModel.refreshStats()
+        }
     }
 }
 
@@ -20,110 +54,125 @@ struct HomeView: View {
 private extension HomeView {
     var header: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Welcome back")
+            Text("Transcription History")
                 .font(.largeTitle).bold()
-            Text("Graba con Fn/Globe o con el menú superior. Aquí verás tus sesiones recientes y accesos rápidos.")
+            Text("Your voice journey in numbers.")
                 .foregroundColor(.secondary)
                 .font(.subheadline)
         }
     }
-
+    
     var quickActions: some View {
-        HStack(spacing: 16) {
-            actionCard(
-                icon: "record.circle.fill",
-                title: "Nueva grabación",
-                subtitle: "Opción + Fn/Globe",
-                action: { NotificationCenter.default.post(name: .uiStartRecording, object: nil) }
-            )
-            actionCard(
-                icon: "note.text",
-                title: "Nueva nota de voz",
-                subtitle: "Guarda ideas rápidas",
-                action: { NotificationCenter.default.post(name: .uiStartVoiceNote, object: nil) }
-            )
-            actionCard(
-                icon: "text.badge.plus",
-                title: "Añadir snippet",
-                subtitle: "Atajos de texto",
-                action: { NotificationCenter.default.post(name: .uiOpenSnippets, object: nil) }
-            )
-        }
-    }
-
-    var emptyState: some View {
-        VStack(spacing: 14) {
-            Image(systemName: "waveform.and.mic")
-                .font(.system(size: 52))
-                .foregroundColor(.secondary.opacity(0.5))
-
-            Text("Aún no tienes sesiones recientes")
-                .font(.title2).fontWeight(.semibold)
-            Text("Empieza una grabación o crea una nota de voz para verlas aquí.")
+        VStack(alignment: .leading, spacing: 12) {
+            Text("QUICK ACTIONS")
+                .font(.caption)
+                .fontWeight(.bold)
                 .foregroundColor(.secondary)
-                .font(.subheadline)
-
-            HStack(spacing: 12) {
-                Button(action: { NotificationCenter.default.post(name: .uiStartRecording, object: nil) }) {
-                    Label("Empezar a grabar", systemImage: "record.circle.fill")
-                }
-                .buttonStyle(.borderedProminent)
-
-                Button(action: { NotificationCenter.default.post(name: .uiStartVoiceNote, object: nil) }) {
-                    Label("Nota rápida", systemImage: "mic.fill")
-                }
-                .buttonStyle(.bordered)
-            }
-            .padding(.top, 4)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color(NSColor.controlBackgroundColor))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color.secondary.opacity(0.08), lineWidth: 1)
+                .tracking(1)
+            
+            HStack(spacing: 16) {
+                actionCard(
+                    icon: "record.circle.fill",
+                    title: "Record",
+                    subtitle: "New session",
+                    color: .red,
+                    action: { NotificationCenter.default.post(name: .uiStartRecording, object: nil) }
                 )
-        )
+                actionCard(
+                    icon: "note.text",
+                    title: "Voice Note",
+                    subtitle: "Quick idea",
+                    color: .blue,
+                    action: { NotificationCenter.default.post(name: .uiStartVoiceNote, object: nil) }
+                )
+                actionCard(
+                    icon: "text.badge.plus",
+                    title: "Snippet",
+                    subtitle: "Add shortcut",
+                    color: .orange,
+                    action: { NotificationCenter.default.post(name: .uiOpenSnippets, object: nil) }
+                )
+            }
+        }
     }
 
-    func actionCard(icon: String, title: String, subtitle: String, action: @escaping () -> Void) -> some View {
+    func actionCard(icon: String, title: String, subtitle: String, color: Color, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(alignment: .center, spacing: 12) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.accentColor.opacity(0.12))
+                        .fill(color.opacity(0.12))
                         .frame(width: 44, height: 44)
                     Image(systemName: icon)
                         .font(.title3)
-                        .foregroundColor(.accentColor)
+                        .foregroundColor(color)
                 }
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text(title)
                         .font(.headline)
+                        .foregroundColor(.primary)
                     Text(subtitle)
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
                 Spacer()
-                Image(systemName: "chevron.right")
-                    .foregroundColor(.secondary)
-                    .font(.footnote)
             }
-            .padding(14)
+            .padding(12)
             .background(
-                RoundedRectangle(cornerRadius: 14)
+                RoundedRectangle(cornerRadius: 12)
                     .fill(Color(NSColor.controlBackgroundColor))
+                    .shadow(color: .black.opacity(0.05), radius: 2, x: 0, y: 1)
             )
         }
         .buttonStyle(.plain)
         .frame(maxWidth: .infinity)
-        .contentShape(Rectangle())
+    }
+}
+
+struct StatsGrid: View {
+    @ObservedObject var viewModel: DashboardViewModel
+    
+    var body: some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 16), count: 4), spacing: 16) {
+            StatsOverviewCard(
+                title: "CHATS",
+                value: "\(viewModel.totalChats)",
+                unit: "",
+                color: .primary
+            )
+            StatsOverviewCard(
+                title: "WORDS",
+                value: formatNumber(viewModel.totalWords),
+                unit: "",
+                color: .primary
+            )
+            StatsOverviewCard(
+                title: "AVG WPM",
+                value: "\(Int(viewModel.avgWPM))",
+                unit: "",
+                color: .primary
+            )
+            StatsOverviewCard(
+                title: "MIN SAVED",
+                value: String(format: "%.1f", viewModel.timeSavedMinutes),
+                unit: "",
+                color: .yellow
+            )
+        }
+        .padding()
+        .background(Color(NSColor.controlBackgroundColor)) // Darker background to make text pop
+        .cornerRadius(12)
+    }
+    
+    private func formatNumber(_ n: Int) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        return formatter.string(from: NSNumber(value: n)) ?? "\(n)"
     }
 }
 
 #Preview {
     HomeView()
         .environmentObject(AppState.shared)
-        .frame(width: 600, height: 400)
+        .frame(width: 900, height: 800)
 }

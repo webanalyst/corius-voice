@@ -4,7 +4,12 @@ import SwiftUI
 
 struct SpeakerSessionsTab: View {
     let speaker: KnownSpeaker
-    @State private var sessions: [RecordingSession] = []
+    @StateObject private var lazyLoader = SpeakerLazyLoadingService(
+        pageSize: 20,
+        preloadThreshold: 5,
+        cacheCapacity: 50
+    )
+    @State private var allSessions: [RecordingSession] = []
     @State private var isLoading = true
     @State private var searchText = ""
     @State private var selectedSession: RecordingSession?
@@ -13,13 +18,12 @@ struct SpeakerSessionsTab: View {
         VStack(spacing: 0) {
             // Header with stats
             sessionStatsHeader
-
             Divider()
 
             if isLoading {
                 ProgressView("Loading sessions...")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if filteredSessions.isEmpty {
+            } else if lazyLoader.items.isEmpty {
                 emptyState
             } else {
                 sessionsList
@@ -27,6 +31,9 @@ struct SpeakerSessionsTab: View {
         }
         .onAppear {
             loadSessions()
+        }
+        .onChange(of: searchText) { _, _ in
+            updateLazyLoader()
         }
     }
 
@@ -37,7 +44,7 @@ struct SpeakerSessionsTab: View {
             HStack(spacing: 24) {
                 SpeakerStatBox(
                     title: "Sessions",
-                    value: "\(sessions.count)",
+                    value: "\(allSessions.count)",
                     icon: "waveform"
                 )
 
@@ -79,17 +86,49 @@ struct SpeakerSessionsTab: View {
     }
 
     // MARK: - Sessions List
-
     private var sessionsList: some View {
-        List(filteredSessions, selection: $selectedSession) { session in
-            SpeakerSessionRowView(session: session, speaker: speaker)
-                .tag(session)
+        ScrollView {
+            LazyVStack(spacing: 0) {
+                ForEach(Array(lazyLoader.items.enumerated()), id: \.element.id) { index, session in
+                    SpeakerSessionRowView(session: session, speaker: speaker)
+                        .tag(session)
+                        .onAppear {
+                            // Prefetch next page when approaching end
+                            if lazyLoader.shouldLoadMore(currentIndex: index) {
+                                let _ = lazyLoader.loadNextPage(from: filteredSessions)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            selectedSession = session
+                        }
+                        .padding(.horizontal)
+                        .padding(.vertical, 4)
+                    
+                    if index < lazyLoader.items.count - 1 {
+                        Divider()
+                            .padding(.leading, 60)
+                    }
+                }
+                
+                // Loading indicator at bottom
+                if lazyLoader.isLoading && lazyLoader.hasMorePages {
+                    ProgressView()
+                        .padding()
+                }
+                
+                // End of list indicator
+                if !lazyLoader.hasMorePages && !lazyLoader.items.isEmpty {
+                    Text("All sessions loaded")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .padding()
+                }
+            }
         }
-        .listStyle(.inset)
     }
 
     // MARK: - Empty State
-
     private var emptyState: some View {
         VStack(spacing: 16) {
             Spacer()
@@ -113,21 +152,20 @@ struct SpeakerSessionsTab: View {
     }
 
     // MARK: - Computed Properties
-
     private var filteredSessions: [RecordingSession] {
         guard !searchText.isEmpty else {
-            return sessions.sorted { $0.startDate > $1.startDate }
+            return allSessions.sorted { $0.startDate > $1.startDate }
         }
 
         let query = searchText.lowercased()
-        return sessions.filter { session in
+        return allSessions.filter { session in
             (session.title?.lowercased().contains(query) ?? false) ||
             session.fullTranscript.lowercased().contains(query)
         }.sorted { $0.startDate > $1.startDate }
     }
 
     private var formattedTotalDuration: String {
-        let total = sessions.reduce(0.0) { $0 + $1.duration }
+        let total = allSessions.reduce(0.0) { $0 + $1.duration }
         let hours = Int(total) / 3600
         let minutes = (Int(total) % 3600) / 60
 
@@ -139,24 +177,30 @@ struct SpeakerSessionsTab: View {
     }
 
     private var totalWordsSpoken: Int {
-        sessions.reduce(0) { total, session in
+        allSessions.reduce(0) { total, session in
             total + countWordsForSpeaker(in: session)
         }
     }
 
     // MARK: - Methods
-
     private func loadSessions() {
         isLoading = true
-
-        let allSessions = StorageService.shared.loadSessions()
+        let loadedSessions = StorageService.shared.loadSessions()
         let speakerName = speaker.name.lowercased()
 
-        sessions = allSessions.filter { session in
+        allSessions = loadedSessions.filter { session in
             session.speakers.contains { $0.name?.lowercased() == speakerName }
         }
-
+        
+        // Initialize lazy loader with filtered sessions
+        lazyLoader.initialize(with: filteredSessions)
+        
         isLoading = false
+    }
+    
+    // Update loader when search changes
+    private func updateLazyLoader() {
+        lazyLoader.refresh(with: filteredSessions)
     }
 
     private func countWordsForSpeaker(in session: RecordingSession) -> Int {
@@ -176,7 +220,6 @@ struct SpeakerSessionsTab: View {
 struct SpeakerSessionRowView: View {
     let session: RecordingSession
     let speaker: KnownSpeaker
-
     var body: some View {
         HStack(spacing: 12) {
             // Session type icon

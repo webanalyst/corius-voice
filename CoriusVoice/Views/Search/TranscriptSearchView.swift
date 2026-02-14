@@ -7,19 +7,35 @@ import Combine
 struct TranscriptSearchView: View {
     @EnvironmentObject var appState: AppState
     @StateObject private var searchIndex = TranscriptSearchIndex.shared
+    @StateObject private var recentSearches = RecentSearches()
 
     // Search state
     @State private var searchText = ""
     @State private var debouncer = Debouncer(delay: 0.3)
-    @State private var searchResults: [SessionMatch] = []
+    @State private var currentSearchTask: Task<Void, Never>?
+    @State private var allSearchResults: [SessionMatch] = []
     @State private var isSearching = false
     @State private var searchDuration: TimeInterval = 0
     @State private var selectedMatch: SessionMatch?
     @FocusState private var isSearchFocused: Bool
 
+    // UI state
+    @State private var showRecentSearches = false
+    @State private var sortOption: SortOption = .relevance
+    @State private var expandedSessions: Set<UUID> = []
+    @State private var visibleResults: Int = 20
+    @State private var groupedResults: [UUID: [SessionMatch]] = [:]
+
     // Navigation
     @State private var selectedSessionID: UUID?
     @State private var showSessionDetail = false
+    @State private var navigateToSession: UUID?
+    @State private var navigateToTimestamp: TimeInterval?
+
+    enum SortOption: String, CaseIterable {
+        case relevance = "Relevance"
+        case date = "Date"
+    }
 
     var body: some View {
         VStack(spacing: 0) {

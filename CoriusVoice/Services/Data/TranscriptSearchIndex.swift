@@ -45,7 +45,9 @@ final class TranscriptSearchIndex: ObservableObject {
     // MARK: - Debouncing
     
     private var debounceTask: Task<Void, Never>?
-    private let debounceInterval: TimeInterval = 0.5  // 500ms
+    private let debounceInterval: TimeInterval = 0.5  // 500ms for in-app index
+    private var spotlightDebounceTask: Task<Void, Never>?
+    private let spotlightDebounceInterval: TimeInterval = 0.2  // 200ms for Spotlight (faster)
     
     // MARK: - Batch Processing
     

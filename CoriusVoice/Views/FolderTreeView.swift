@@ -62,7 +62,7 @@ struct FolderTreeView: View {
             .padding(.top, 12)
             .padding(.bottom, 4)
 
-            // Folder Tree
+            // Folder Tree - already lazy with LazyVStack, folders are typically < 100 items
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 2) {
                     ForEach(viewModel.rootFolders) { folder in

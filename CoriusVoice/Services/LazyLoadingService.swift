@@ -1,57 +1,94 @@
 import Foundation
+import os.log
 
-// MARK: - Lazy Loading Service
+// MARK: - Generic Lazy Loading Service
 
-/// Servicio para lazy loading de items en listas
-/// Carga items en paginas para no sobrecargar la UI
+/// Generic lazy loading service for any Identifiable type
+/// Provides paginated loading with prefetch and LRU caching
 @MainActor
-class LazyLoadingService: ObservableObject {
+class LazyLoadingService<T: Identifiable & Hashable>: ObservableObject {
     
     // MARK: - Configuration
     
     let pageSize: Int
-    let preloadThreshold: Int // Cuántos items antes del final para precargar
+    let preloadThreshold: Int
+    let cacheCapacity: Int
     
     // MARK: - State
     
     @Published private(set) var currentPage = 0
     @Published private(set) var hasMorePages = true
     @Published private(set) var isLoading = false
+    @Published private(set) var items: [T] = []
     
-    private var allItems: [WorkspaceItem] = []
-    @Published private(set) var items: [WorkspaceItem] = []
+    // MARK: - Cache
+    
+    private var loadedItems: Set<T.ID> = []
+    private var lruCache: LRUCache<T.ID, T>
+    
+    // MARK: - Logger
+    
+    private let logger = Logger(subsystem: "com.corius.voice", category: "LazyLoading")
     
     // MARK: - Initialization
     
-    init(pageSize: Int = 50, preloadThreshold: Int = 10) {
+    init(pageSize: Int = 50, preloadThreshold: Int = 10, cacheCapacity: Int = 50) {
         self.pageSize = pageSize
         self.preloadThreshold = preloadThreshold
+        self.cacheCapacity = cacheCapacity
+        self.lruCache = LRUCache(capacity: cacheCapacity)
     }
     
     // MARK: - Public API
     
-    func initialize(with items: [WorkspaceItem]) {
-        self.allItems = items
-        self.currentPage = 0
-        self.hasMorePages = items.count > pageSize
+    /// Initialize with all items (client-side filtering)
+    func initialize(with allItems: [T]) {
         self.items = []
-        loadFirstPage()
+        self.currentPage = 0
+        self.hasMorePages = allItems.count > pageSize
+        self.loadedItems.removeAll()
+        self.lruCache.clear()
+        
+        loadFirstPage(from: allItems)
     }
     
-    func loadFirstPage() {
+    /// Load first page of items
+    func loadFirstPage(from allItems: [T]) {
+        let startTime = CFAbsoluteTimeGetCurrent()
+        
         currentPage = 0
         items = []
-        let range = 0..<min(pageSize, allItems.count)
-        items.append(contentsOf: allItems[range])
+        loadedItems.removeAll()
+        
+        let endIndex = min(pageSize, allItems.count)
+        let firstPage = Array(allItems[0..<endIndex])
+        
+        items = firstPage
         currentPage = 1
         hasMorePages = allItems.count > pageSize
+        
+        // Cache loaded items
+        for item in firstPage {
+            loadedItems.insert(item.id)
+            lruCache.put(item.id, value: item)
+        }
+        
+        let loadTime = (CFAbsoluteTimeGetCurrent() - startTime) * 1000
+        logger.debug("📄 First page loaded: \(items.count) items in \(String(format: "%.1f", loadTime))ms")
     }
     
-    func loadNextPage() -> [WorkspaceItem] {
+    /// Load next page of items
+    func loadNextPage(from allItems: [T]) -> [T] {
         guard hasMorePages, !isLoading else { return [] }
         
+        let startTime = CFAbsoluteTimeGetCurrent()
         isLoading = true
-        defer { isLoading = false }
+        defer { 
+            isLoading = false
+            
+            let loadTime = (CFAbsoluteTimeGetCurrent() - startTime) * 1000
+            logger.debug("📄 Page \(currentPage) loaded: \(items.count) total items in \(String(format: "%.1f", loadTime))ms")
+        }
         
         let startIndex = items.count
         let endIndex = min(startIndex + pageSize, allItems.count)
@@ -64,20 +101,62 @@ class LazyLoadingService: ObservableObject {
         let newItems = Array(allItems[startIndex..<endIndex])
         items.append(contentsOf: newItems)
         
+        // Cache newly loaded items
+        for item in newItems {
+            loadedItems.insert(item.id)
+            lruCache.put(item.id, value: item)
+        }
+        
         hasMorePages = endIndex < allItems.count
         currentPage += 1
         
         return newItems
     }
     
+    /// Check if more items should be loaded based on current index
     func shouldLoadMore(currentIndex: Int) -> Bool {
         return currentIndex >= items.count - preloadThreshold && hasMorePages && !isLoading
     }
     
-    func refresh(with newItems: [WorkspaceItem]) {
+    /// Refresh with new items (e.g., after filter change)
+    func refresh(with newItems: [T]) {
         initialize(with: newItems)
     }
+    
+    /// Reset pagination state
+    func reset() {
+        items = []
+        currentPage = 0
+        hasMorePages = true
+        loadedItems.removeAll()
+        lruCache.clear()
+    }
+    
+    /// Get cached item by ID
+    func getCached(id: T.ID) -> T? {
+        return lruCache.get(id)
+    }
+    
+    /// Cache an item manually
+    func cache(_ item: T) {
+        lruCache.put(item.id, value: item)
+    }
+    
+    /// Get cache statistics
+    var cacheStats: (hitRate: Double, size: Int) {
+        return (lruCache.hitRate, lruCache.count)
+    }
 }
+
+// MARK: - Speaker Lazy Loading Service
+
+/// Specialized lazy loading for speakers
+typealias SpeakerLazyLoadingService = LazyLoadingService<KnownSpeaker>
+
+// MARK: - SessionMatch Lazy Loading Service
+
+/// Specialized lazy loading for search results
+typealias SearchResultsLazyLoadingService = LazyLoadingService<SessionMatch>
 
 // MARK: - Paginated Query Service
 

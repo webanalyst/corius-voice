@@ -5,8 +5,12 @@ import os.log
 import AppKit
 #endif
 
+// Transcript search index for fast full-text search (accessed via shared singleton)
+// Note: Incremental index updates are now called via TranscriptSearchIndex.shared
+
 // MARK: - SwiftData Service
 // Provides fast metadata access via SwiftData while keeping full data in JSON files
+// Integrated with versioned schema management and caching layers for optimal performance
 
 @MainActor
 final class SwiftDataService {
@@ -17,16 +21,20 @@ final class SwiftDataService {
     let modelContainer: ModelContainer
     let modelContext: ModelContext
     
+    // MARK: - Cache and Index Services
+    
+    private let sessionIndex = SessionIndexService.shared
+    private let sessionCache = SessionCacheService.shared
+    private let queryCache = SessionQueryCache.shared
+    private let metrics = CacheMetrics.shared
+    
     private init() {
         do {
-            let schema = Schema([
-                SDSession.self,
-                SDFolder.self,
-                SDLabel.self,
-                SDKnownSpeaker.self,
-                SDWorkspaceDatabase.self,
-                SDWorkspaceItem.self
-            ])
+            // Use versioned schema from SchemaVersionManager
+            let schemaVersionManager = SchemaVersionManager.shared
+            schemaVersionManager.checkSchemaVersion(onLaunch: true)
+            
+            let schema = schemaVersionManager.getCurrentSchema()
             
             let modelConfiguration = ModelConfiguration(
                 schema: schema,
@@ -34,14 +42,14 @@ final class SwiftDataService {
                 allowsSave: true
             )
             
-            modelContainer = try ModelContainer(
-                for: schema,
-                configurations: [modelConfiguration]
-            )
+            modelContainer = try ModelContainer.createWithVersionedSchema()
             modelContext = modelContainer.mainContext
             modelContext.autosaveEnabled = true
             
-            logger.info("✅ SwiftData initialized successfully")
+            logger.info("✅ SwiftData initialized successfully with schema V\(schemaVersionManager.currentSchemaVersion.rawValue)")
+            
+            // Log migration statistics for debugging
+            schemaVersionManager.logMigrationStatistics()
         } catch {
             logger.error("❌ Failed to initialize SwiftData: \(error.localizedDescription)")
             fatalError("Failed to initialize SwiftData: \(error)")
@@ -61,6 +69,10 @@ final class SwiftDataService {
     }
     
     func migrateFromJSONIfNeeded() async {
+        // Check schema version before migration
+        let schemaVersionManager = SchemaVersionManager.shared
+        schemaVersionManager.checkSchemaVersion(onLaunch: true)
+        
         guard !hasMigrated else {
             logger.info("📦 SwiftData already migrated")
             return
@@ -68,19 +80,48 @@ final class SwiftDataService {
         
         logger.info("📦 Starting SwiftData migration from JSON...")
         
-        await migrateFolders()
-        await migrateLabels()
-        await migrateSessions()
-        await migrateSpeakers()
-        await migrateWorkspace()
-        
-        hasMigrated = true
-        logger.info("✅ SwiftData migration complete")
+        do {
+            await migrateFolders()
+            await migrateLabels()
+            await migrateSessions()
+            await migrateSpeakers()
+            await migrateWorkspace()
+            
+            hasMigrated = true
+            
+            // Mark schema migration as complete
+            schemaVersionManager.markMigrationComplete(to: .v1)
+            
+            // Perform post-migration tasks (rebuild indexes)
+            try await schemaVersionManager.performPostMigrationTasks(
+                fromVersion: 0,
+                toVersion: schemaVersionManager.currentSchemaVersion.rawValue
+            )
+            
+            // Rebuild transcript search index after migration
+            await rebuildTranscriptSearchIndex()
+            
+            logger.info("✅ SwiftData migration complete with schema V\(schemaVersionManager.currentSchemaVersion.rawValue)")
+        } catch {
+            logger.error("❌ Migration failed: \(error.localizedDescription)")
+            schemaVersionManager.handleMigrationError(
+                error,
+                fromVersion: 0,
+                toVersion: schemaVersionManager.currentSchemaVersion.rawValue
+            )
+        }
     }
 
     func migrateWorkspaceIfNeeded() async {
         guard !hasMigratedWorkspace else { return }
-        await migrateWorkspace()
+        
+        do {
+            await migrateWorkspace()
+            hasMigratedWorkspace = true
+            logger.info("✅ Workspace migration complete")
+        } catch {
+            logger.error("❌ Workspace migration failed: \(error.localizedDescription)")
+        }
     }
     
     private func migrateFolders() async {
@@ -241,6 +282,63 @@ final class SwiftDataService {
     
     // MARK: - Session Operations (Fast Queries)
     
+    /// Fetch sessions with pagination and optional transcript inclusion
+    /// - Parameters:
+    ///   - folderID: Optional folder filter
+    ///   - labelID: Optional label filter
+    ///   - fetchLimit: Maximum number of sessions to return
+    ///   - fetchOffset: Number of sessions to skip
+    ///   - includeTranscript: Whether to include transcript bodies (default: false for performance)
+    /// - Returns: Array of SDSession objects
+    func fetchSessions(
+        folderID: UUID? = nil,
+        labelID: UUID? = nil,
+        fetchLimit: Int? = nil,
+        fetchOffset: Int = 0,
+        includeTranscript: Bool = false
+    ) -> [SDSession] {
+        let startTime = CFAbsoluteTimeGetCurrent()
+        
+        var descriptor = FetchDescriptor<SDSession>(
+            sortBy: [SortDescriptor(\.startDate, order: .reverse)]
+        )
+        
+        // Apply predicates based on filters
+        if let folderID = folderID {
+            if folderID == Folder.inboxID {
+                descriptor.predicate = #Predicate<SDSession> { $0.folderID == nil }
+            } else {
+                descriptor.predicate = #Predicate<SDSession> { $0.folderID == folderID }
+            }
+        } else if let labelID = labelID {
+            // For label filtering, we need to fetch all and filter in memory
+            // TODO: Optimize when SwiftData supports array contains predicates
+            let all = fetchAllSessions()
+            let filtered = all.filter { $0.labelIDs.contains(labelID) }
+            let start = filtered.index(filtered.startIndex, offsetBy: min(fetchOffset, filtered.count))
+            let end = filtered.index(filtered.startIndex, offsetBy: min(fetchOffset + (fetchLimit ?? filtered.count), filtered.count))
+            return Array(filtered[start..<end])
+        }
+        
+        descriptor.fetchOffset = fetchOffset
+        if let limit = fetchLimit {
+            descriptor.fetchLimit = limit
+        }
+        
+        let result = (try? modelContext.fetch(descriptor)) ?? []
+        
+        let queryTime = (CFAbsoluteTimeGetCurrent() - startTime) * 1000
+        if queryTime > 100 {
+            logger.warning("⚠️ fetchSessions exceeded 100ms: \(String(format: "%.1f", queryTime))ms")
+        }
+        
+        // Note: SwiftData uses faulting by default, so transcript bodies won't load
+        // unless explicitly accessed. The includeTranscript parameter is for documentation
+        // and future use when we implement manual fault control.
+        
+        return result
+    }
+    
     func fetchAllSessions() -> [SDSession] {
         let descriptor = FetchDescriptor<SDSession>(
             sortBy: [SortDescriptor(\.startDate, order: .reverse)]
@@ -257,18 +355,11 @@ final class SwiftDataService {
     }
     
     func fetchSessions(inFolder folderID: UUID) -> [SDSession] {
-        let predicate = #Predicate<SDSession> { $0.folderID == folderID }
-        let descriptor = FetchDescriptor<SDSession>(
-            predicate: predicate,
-            sortBy: [SortDescriptor(\.startDate, order: .reverse)]
-        )
-        return (try? modelContext.fetch(descriptor)) ?? []
+        return fetchSessions(folderID: folderID)
     }
     
     func fetchSessions(withLabel labelID: UUID) -> [SDSession] {
-        // Need to decode labelIDsData to check containment
-        let allSessions = fetchAllSessions()
-        return allSessions.filter { $0.labelIDs.contains(labelID) }
+        return fetchSessions(labelID: labelID)
     }
     
     func fetchUnclassifiedSessions() -> [SDSession] {
@@ -301,10 +392,27 @@ final class SwiftDataService {
     }
     
     func insertSession(_ session: RecordingSession) {
+        let startTime = Date()
         let sdSession = SDSession.from(session)
         modelContext.insert(sdSession)
         try? modelContext.save()
-        logger.info("📝 Inserted session: \(session.id)")
+        
+        // Incremental index update (non-blocking, uses new async API)
+        Task.detached(priority: .utility) {
+            await TranscriptSearchIndex.shared.indexTranscript(
+                for: session.id,
+                segments: session.transcriptSegments
+            )
+            
+            let duration = Date().timeIntervalSince(startTime)
+            await MainActor.run {
+                if duration > 0.05 {
+                    self.logger.warning("⚠️ Session insert + indexing took \(String(format: "%.0f", duration * 1000))ms")
+                } else {
+                    self.logger.debug("📝 Inserted session \(session.id) in \(String(format: "%.2f", duration))s")
+                }
+            }
+        }
     }
     
     func updateSession(_ session: RecordingSession) {
@@ -332,17 +440,37 @@ final class SwiftDataService {
             existing.updatedAt = Date()
             
             try? modelContext.save()
-            logger.info("📝 Updated session: \(session.id)")
+            
+            // Incremental index update with debouncing (non-blocking, uses new async API)
+            Task.detached(priority: .utility) {
+                await TranscriptSearchIndex.shared.updateTranscript(
+                    for: session.id,
+                    segments: session.transcriptSegments
+                )
+                await MainActor.run {
+                    self.logger.debug("📝 Updated session \(session.id) and queued debounced index refresh")
+                }
+            }
         } else {
             insertSession(session)
         }
     }
     
     func deleteSession(id: UUID) {
+        let startTime = Date()
         if let session = getSession(id: id) {
             modelContext.delete(session)
             try? modelContext.save()
-            logger.info("🗑️ Deleted session: \(id)")
+            
+            // Remove from search index before deletion (non-blocking, uses new async API)
+            Task.detached(priority: .utility) {
+                await TranscriptSearchIndex.shared.removeTranscript(for: id)
+                
+                let duration = Date().timeIntervalSince(startTime)
+                await MainActor.run {
+                    self.logger.info("🗑️ Deleted session \(id) and removed from search index in \(String(format: "%.2f", duration))s")
+                }
+            }
         }
     }
 
@@ -374,6 +502,16 @@ final class SwiftDataService {
 
         let deleteIDs = deleteCandidates.subtracting(keepIDs)
         guard !deleteIDs.isEmpty else { return 0 }
+
+        // Batch remove from search index for efficiency (non-blocking)
+        Task { @MainActor in
+            let batchStartTime = Date()
+            for id in deleteIDs {
+                await TranscriptSearchIndex.shared.removeTranscript(for: id)
+            }
+            let batchDuration = Date().timeIntervalSince(batchStartTime)
+            logger.info("🗑️ Batch removed \(deleteIDs.count) sessions from search index in \(String(format: "%.2f", batchDuration))s")
+        }
 
         for id in deleteIDs {
             if let session = getSession(id: id) {

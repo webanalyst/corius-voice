@@ -31,6 +31,12 @@ class FolderTreeViewModel: ObservableObject {
 
     private let storage = StorageService.shared
     private var cancellables = Set<AnyCancellable>()
+    
+    // Cache services
+    private let sessionCache = SessionCacheService.shared
+    private let sessionIndex = SessionIndexService.shared
+    private let queryCache = SessionQueryCache.shared
+    private let metrics = CacheMetrics.shared
 
     // MARK: - Initialization
 
@@ -154,18 +160,32 @@ class FolderTreeViewModel: ObservableObject {
 
     /// Count of sessions in a specific folder (including subfolders)
     func sessionCount(for folderID: UUID) -> Int {
+        // Try cache first (O(1) lookup)
+        if useSwiftData {
+            if let cachedCount = sessionCache.getFolderCount(folderID) {
+                metrics.recordFolderCountHit()
+                return cachedCount
+            }
+            metrics.recordFolderCountMiss()
+        }
+        
         // Use SwiftData metadata if available (fast)
         if useSwiftData {
+            let count: Int
             if folderID == Folder.inboxID {
-                return sessionMetadata.filter { $0.folderID == nil }.count
+                count = sessionMetadata.filter { $0.folderID == nil }.count
+            } else {
+                let folderIDs = Set([folderID] + folders.descendants(of: folderID).map { $0.id })
+                count = sessionMetadata.filter { meta in
+                    if let metaFolderID = meta.folderID {
+                        return folderIDs.contains(metaFolderID)
+                    }
+                    return false
+                }.count
             }
-            let folderIDs = Set([folderID] + folders.descendants(of: folderID).map { $0.id })
-            return sessionMetadata.filter { meta in
-                if let metaFolderID = meta.folderID {
-                    return folderIDs.contains(metaFolderID)
-                }
-                return false
-            }.count
+            // Cache the result
+            sessionCache.setFolderCount(folderID, count: count)
+            return count
         }
         
         // Fall back to JSON sessions

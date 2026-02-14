@@ -75,7 +75,12 @@ struct SpeakerListView: View {
     let speakers: [KnownSpeaker]
     @Binding var selectedSpeaker: KnownSpeaker?
     let onDelete: (UUID) -> Void
-
+    @StateObject private var lazyLoader = SpeakerLazyLoadingService(
+        pageSize: 20,
+        preloadThreshold: 5,
+        cacheCapacity: 50
+    )
+    
     var body: some View {
         VStack(spacing: 0) {
             // Header
@@ -112,19 +117,56 @@ struct SpeakerListView: View {
                 }
                 .padding()
             } else {
-                List(speakers, selection: $selectedSpeaker) { speaker in
-                    SpeakerLibraryRowView(speaker: speaker)
-                        .tag(speaker)
-                        .contextMenu {
-                            Button("Delete", role: .destructive) {
-                                onDelete(speaker.id)
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(Array(lazyLoader.items.enumerated()), id: \.element.id) { index, speaker in
+                            SpeakerLibraryRowView(speaker: speaker)
+                                .tag(speaker)
+                                .onAppear {
+                                    // Prefetch next page when approaching end
+                                    if lazyLoader.shouldLoadMore(currentIndex: index) {
+                                        let _ = lazyLoader.loadNextPage(from: speakers)
+                                    }
+                                }
+                                .contextMenu {
+                                    Button("Delete", role: .destructive) {
+                                        onDelete(speaker.id)
+                                    }
+                                }
+                                .background(
+                                    RoundedRectangle(cornerRadius: 6)
+                                        .fill(selectedSpeaker?.id == speaker.id ? Color.accentColor.opacity(0.1) : Color.clear)
+                                )
+                                .onTapGesture {
+                                    selectedSpeaker = speaker
+                                }
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                            
+                            if index < lazyLoader.items.count - 1 {
+                                Divider()
+                                    .padding(.leading, 52)
                             }
                         }
+                        
+                        // Loading indicator at bottom
+                        if lazyLoader.isLoading {
+                            ProgressView()
+                                .scaleEffect(0.7)
+                                .padding(8)
+                        }
+                    }
                 }
-                .listStyle(.sidebar)
+                .background(Color(NSColor.controlBackgroundColor))
             }
         }
         .background(Color(NSColor.controlBackgroundColor))
+        .onAppear {
+            lazyLoader.initialize(with: speakers)
+        }
+        .onChange(of: speakers.count) { _, _ in
+            lazyLoader.refresh(with: speakers)
+        }
     }
 }
 

@@ -77,11 +77,13 @@ struct ResizableDivider: View {
 struct SessionsView: View {
     @EnvironmentObject var appState: AppState
     @StateObject private var folderViewModel = FolderTreeViewModel()
-    @StateObject private var viewModel = SessionsViewModel()
+    @StateObject private var sessionRepository = SessionRepository.shared
+    @State private var selectedSessionID: UUID?
     @State private var selectedSession: RecordingSession?
     @State private var showingNewSession = false
     @State private var showingImporter = false
     @State private var searchText = ""
+    @State private var searchDebouncer = Debouncer(delay: 0.3)
     @State private var importError: String?
     @State private var showingImportError = false
     @State private var importOrphansMessage: String?
@@ -142,7 +144,7 @@ struct SessionsView: View {
             switch result {
             case .success(let urls):
                 if let url = urls.first {
-                    viewModel.importAudioFile(from: url) { importedSession, error in
+                    importAudioFile(from: url) { importedSession, error in
                         if let error = error {
                             importError = error
                             showingImportError = true
@@ -187,26 +189,42 @@ struct SessionsView: View {
                 )
         }
         .onAppear {
-            // Data loads from cache in ViewModel init, so this is rarely needed
-            // Only load if somehow the cache was empty
+            // Load folder/label data from cache
             if !folderViewModel.hasLoadedOnce {
                 folderViewModel.loadData()
+            }
+            
+            // Initialize SessionRepository with current filter state
+            Task { @MainActor in
+                let startTime = CFAbsoluteTimeGetCurrent()
+                await sessionRepository.loadFirstPage()
+                let loadTime = (CFAbsoluteTimeGetCurrent() - startTime) * 1000
+                os_log("📊 SessionsView repository init: %.1fms", type: .info, loadTime)
+                
+                if loadTime > 100 {
+                    os_log("⚠️ SessionsView init exceeded 100ms target: %.1fms", type: .warning, loadTime)
+                }
             }
         }
         .onChange(of: showingNewSession) { _, isShowing in
             // Reload sessions when the recording sheet is dismissed
             if !isShowing {
                 Task { @MainActor in
+                    // Reload repository to get new session
+                    await sessionRepository.loadFirstPage()
                     folderViewModel.reloadSessions()
-                    // Select the most recent session if available (use metadata for fast lookup)
-                    if let mostRecent = folderViewModel.sessionMetadata.sorted(by: { $0.startDate > $1.startDate }).first {
-                        selectedSession = folderViewModel.loadFullSession(id: mostRecent.id)
+                    
+                    // Select the most recent session if available
+                    if let mostRecent = sessionRepository.sessions.first {
+                        selectedSession = sessionRepository.getFullSession(id: mostRecent.id)
+                        selectedSessionID = mostRecent.id
                     }
                 }
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .recordingDidFinish)) { _ in
             Task { @MainActor in
+                await sessionRepository.loadFirstPage()
                 folderViewModel.reloadSessions()
             }
         }
@@ -233,13 +251,18 @@ struct SessionsView: View {
 
                 // Column 2: Sessions list
                 SessionsListView(
-                    sessionMetadata: filteredSessionMetadata,
+                    repository: sessionRepository,
                     selectedSessionID: Binding(
-                        get: { selectedSession?.id },
+                        get: { selectedSessionID },
                         set: { newID in
+                            selectedSessionID = newID
                             if let id = newID {
-                                // Load full session when selected
-                                selectedSession = folderViewModel.loadFullSession(id: id)
+                                // Load full session from repository cache when selected
+                                if let fullSession = sessionRepository.getFullSession(id: id) {
+                                    selectedSession = fullSession
+                                } else {
+                                    selectedSession = folderViewModel.loadFullSession(id: id)
+                                }
                             } else {
                                 selectedSession = nil
                             }
@@ -247,9 +270,10 @@ struct SessionsView: View {
                     ),
                     searchText: $searchText,
                     onDelete: { id in
-                        viewModel.deleteSession(id)
+                        deleteSession(id)
                         Task { @MainActor in
                             folderViewModel.reloadSessions()
+                            sessionRepository.reloadTotalCount()
                         }
                     },
                     folderViewModel: folderViewModel
@@ -392,8 +416,8 @@ struct SessionsView: View {
             },
             set: { newValue in
                 DispatchQueue.main.async {
-                    // First save to storage
-                    viewModel.updateSession(newValue)
+                    // Save to SwiftData via repository
+                    SwiftDataService.shared.updateSession(newValue)
                     // Update our local selection
                     selectedSession = newValue
                     // Update the cache in folderViewModel
@@ -402,19 +426,37 @@ struct SessionsView: View {
             }
         )
     }
+
+    /// Delete a session from both JSON storage and SwiftData
+    private func deleteSession(_ id: UUID) {
+        // Delete from JSON storage
+        StorageService.shared.deleteSession(id)
+        // Delete from SwiftData
+        SwiftDataService.shared.deleteSession(id: id)
+        // Clear from repository cache
+        sessionRepository.clearSession(id: id)
+        // Deselect if this was the selected session
+        if selectedSessionID == id {
+            selectedSessionID = nil
+            selectedSession = nil
+        }
+    }
 }
 
-// MARK: - Sessions List View
+// MARK: - Sessions List View (Lazy Loading)
 
 struct SessionsListView: View {
-    let sessionMetadata: [SDSession]
+    @ObservedObject var repository: SessionRepository
     @Binding var selectedSessionID: UUID?
     @Binding var searchText: String
     let onDelete: (UUID) -> Void
     @ObservedObject var folderViewModel: FolderTreeViewModel
 
-    @State private var showingMoveSheet = false
-    @State private var sessionToMove: SDSession?
+    @State private var searchDebouncer = Debouncer(delay: 0.3)
+    @State private var visibleSessions: Set<UUID> = []
+    @State private var scrollOffset: CGFloat = 0
+    @State private var renderStartTime: CFAbsoluteTime?
+    @State private var lastMemoryWarning: CFAbsoluteTime = 0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -423,7 +465,12 @@ struct SessionsListView: View {
                 Text(headerTitle)
                     .font(.headline)
                 Spacer()
-                Text("\(sessionMetadata.count)")
+                if repository.isLoading {
+                    ProgressView()
+                        .scaleEffect(0.7)
+                        .frame(width: 16, height: 16)
+                }
+                Text("\(repository.totalCount)")
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .padding(.horizontal, 8)
@@ -441,8 +488,20 @@ struct SessionsListView: View {
                     .foregroundColor(.secondary)
                 TextField("Search sessions...", text: $searchText)
                     .textFieldStyle(.plain)
+                    .onChange(of: searchText) { _, newValue in
+                        searchDebouncer.debounce {
+                            Task {
+                                await updateSearch(query: newValue)
+                            }
+                        }
+                    }
                 if !searchText.isEmpty {
-                    Button(action: { searchText = "" }) {
+                    Button(action: {
+                        searchText = ""
+                        Task {
+                            await updateSearch(query: "")
+                        }
+                    }) {
                         Image(systemName: "xmark.circle.fill")
                             .foregroundColor(.secondary)
                     }
@@ -457,71 +516,202 @@ struct SessionsListView: View {
 
             Divider()
 
-            if sessionMetadata.isEmpty {
-                VStack(spacing: 12) {
-                    Spacer()
-                    Image(systemName: "waveform.circle")
-                        .font(.system(size: 48))
-                        .foregroundColor(.secondary.opacity(0.5))
-                    Text("No sessions")
-                        .font(.headline)
-                        .foregroundColor(.secondary)
-                    Text(emptyStateMessage)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
-                    Spacer()
-                }
-                .padding()
+            if repository.sessions.isEmpty && !repository.isLoading {
+                emptyStateView
             } else {
-                List(sessionMetadata, id: \.id, selection: $selectedSessionID) { session in
-                    SessionRowFromMetadata(
-                        session: session,
-                        folderViewModel: folderViewModel
-                    )
-                    .tag(session.id)
-                    .contextMenu {
-                        // Move to folder
-                        Menu("Move to...") {
-                            ForEach(folderViewModel.rootFolders) { folder in
-                                FolderMenuItemForMetadata(
-                                    folder: folder,
-                                    folderViewModel: folderViewModel,
-                                    sessionID: session.id
-                                )
-                            }
-                        }
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(Array(repository.sessions.enumerated()), id: \.element.id) { index, session in
+                            SessionRowFromMetadata(
+                                session: session,
+                                folderViewModel: folderViewModel
+                            )
+                            .tag(session.id)
+                            .background(
+                                GeometryReader { geo in
+                                    Color.clear.preference(
+                                        key: ScrollOffsetPreferenceKey.self,
+                                        value: geo.frame(in: .named("scroll")).minY
+                                    )
+                                }
+                            )
+                            .onAppear {
+                                // Track render time
+                                let renderTime = renderStartTime.map { CFAbsoluteTimeGetCurrent() - $0 } ?? 0
+                                if renderTime > 0.1 {
+                                    os_log("⚠️ SessionsView render time: %.1fms", type: .info, renderTime * 1000)
+                                }
 
-                        // Labels submenu
-                        Menu("Labels") {
-                            ForEach(folderViewModel.labels.sorted) { label in
-                                Button(action: {
-                                    folderViewModel.toggleLabel(label.id, for: session.id)
-                                }) {
-                                    HStack {
-                                        Circle()
-                                            .fill(Color(hex: label.color) ?? .gray)
-                                            .frame(width: 8, height: 8)
-                                        Text(label.name)
-                                        if session.labelIDs.contains(label.id) {
-                                            Image(systemName: "checkmark")
-                                        }
+                                visibleSessions.insert(session.id)
+                                
+                                // Load next page if approaching end (last 10 items)
+                                if index >= repository.sessions.count - 10 {
+                                    Task {
+                                        await repository.loadNextPage()
+                                    }
+                                }
+                                
+                                // Prefetch transcripts for upcoming items (10-item preload threshold)
+                                if index >= 10 {
+                                    let prefetchStart = max(0, index - 10)
+                                    let prefetchEnd = min(index + 10, repository.sessions.count)
+                                    let upcomingSessions = Array(repository.sessions[prefetchStart..<prefetchEnd]).map { $0.id }
+                                    Task {
+                                        await repository.prefetchTranscripts(for: upcomingSessions)
                                     }
                                 }
                             }
+                            .onDisappear {
+                                visibleSessions.remove(session.id)
+                            }
+                            .contextMenu {
+                                sessionContextMenu(for: session)
+                            }
                         }
 
-                        Divider()
-
-                        Button("Delete", role: .destructive) {
-                            onDelete(session.id)
-                            if selectedSessionID == session.id {
-                                selectedSessionID = nil
-                            }
+                        // Loading indicator at bottom
+                        if repository.isLoading && repository.hasMorePages {
+                            ProgressView()
+                                .padding()
+                        }
+                        
+                        // End of list indicator
+                        if !repository.hasMorePages && !repository.sessions.isEmpty {
+                            Text("All sessions loaded")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .padding()
                         }
                     }
                 }
-                .listStyle(.plain)
+                .coordinateSpace(name: "scroll")
+                .background(
+                    GeometryReader { geo in
+                        Color.clear.preference(
+                            key: ScrollOffsetPreferenceKey.self,
+                            value: -geo.frame(in: .named("scroll")).minY
+                        )
+                    }
+                )
+            }
+        }
+        .onAppear {
+            renderStartTime = CFAbsoluteTimeGetCurrent()
+            Task {
+                let startTime = CFAbsoluteTimeGetCurrent()
+                await repository.loadFirstPage()
+                let loadTime = (CFAbsoluteTimeGetCurrent() - startTime) * 1000
+                os_log("📊 SessionsView initial load: %.1fms", type: .info, loadTime)
+
+                // Warn if exceeds 100ms target
+                if loadTime > 100 {
+                    os_log("⚠️ SessionsView initial load exceeded 100ms target: %.1fms", type: .warning, loadTime)
+                }
+
+                // Log memory usage for large datasets
+                if repository.totalCount >= 1000 {
+                    logMemoryUsage()
+                }
+            }
+        }
+        .onChange(of: folderViewModel.selectedFolderID) { _, newID in
+            Task {
+                await repository.setFilter(
+                    folderID: newID,
+                    labelID: folderViewModel.selectedLabelID,
+                    searchQuery: searchText
+                )
+            }
+        }
+        .onChange(of: folderViewModel.selectedLabelID) { _, newID in
+            Task {
+                await repository.setFilter(
+                    folderID: folderViewModel.selectedFolderID,
+                    labelID: newID,
+                    searchQuery: searchText
+                )
+            }
+        }
+    }
+
+    /// Log current memory usage for performance monitoring
+    private func logMemoryUsage() {
+        let now = CFAbsoluteTimeGetCurrent()
+        guard now - lastMemoryWarning > 60 else { return } // Once per minute max
+        lastMemoryWarning = now
+
+        let info = mach_task_basic_info()
+        var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size)/4
+        let result = withUnsafeMutablePointer(to: &info) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: 1) {
+                task_info(mach_task_self_, task_flavor_t(MACH_TASK_BASIC_INFO), $0, &count)
+            }
+        }
+
+        if result == KERN_SUCCESS {
+            let usedMB = Double(info.resident_size) / 1024 / 1024
+            os_log("💾 Memory usage: %.1f MB with %d sessions loaded", type: .info, usedMB, repository.sessions.count)
+
+            if usedMB > 500 {
+                os_log("⚠️ High memory usage detected: %.1f MB", type: .warning, usedMB)
+            }
+        }
+    }
+
+    private var emptyStateView: some View {
+        VStack(spacing: 12) {
+            Spacer()
+            Image(systemName: "waveform.circle")
+                .font(.system(size: 48))
+                .foregroundColor(.secondary.opacity(0.5))
+            Text("No sessions")
+                .font(.headline)
+                .foregroundColor(.secondary)
+            Text(emptyStateMessage)
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+            Spacer()
+        }
+        .padding()
+    }
+
+    @ViewBuilder
+    private func sessionContextMenu(for session: SDSession) -> some View {
+        Menu("Move to...") {
+            ForEach(folderViewModel.rootFolders) { folder in
+                FolderMenuItemForMetadata(
+                    folder: folder,
+                    folderViewModel: folderViewModel,
+                    sessionID: session.id
+                )
+            }
+        }
+
+        Menu("Labels") {
+            ForEach(folderViewModel.labels.sorted) { label in
+                Button(action: {
+                    folderViewModel.toggleLabel(label.id, for: session.id)
+                }) {
+                    HStack {
+                        Circle()
+                            .fill(Color(hex: label.color) ?? .gray)
+                            .frame(width: 8, height: 8)
+                        Text(label.name)
+                        if session.labelIDs.contains(label.id) {
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                }
+            }
+        }
+
+        Divider()
+
+        Button("Delete", role: .destructive) {
+            onDelete(session.id)
+            if selectedSessionID == session.id {
+                selectedSessionID = nil
             }
         }
     }
@@ -546,6 +736,32 @@ struct SessionsListView: View {
             return "Start a new session to record meetings or calls"
         }
         return "Move sessions here from the Inbox"
+    }
+
+    private func updateSearch(query: String) async {
+        await repository.setFilter(
+            folderID: folderViewModel.selectedFolderID,
+            labelID: folderViewModel.selectedLabelID,
+            searchQuery: query
+        )
+    }
+}
+
+// MARK: - Visibility Preference Key
+
+struct VisibleItemPreferenceKey: PreferenceKey {
+    static var defaultValue: [UUID?] = []
+    static func reduce(value: inout [UUID?], nextValue: () -> [UUID?]) {
+        value.append(contentsOf: nextValue())
+    }
+}
+
+// MARK: - Scroll Offset Preference Key
+
+struct ScrollOffsetPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
     }
 }
 
